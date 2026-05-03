@@ -14,7 +14,7 @@
 import fs from "node:fs";
 import readline from "node:readline";
 
-export const JSONL_PATH = "/tmp/agentscope.jsonl";
+export const JSONL_PATH = "/tmp/claudelens.jsonl";
 
 const ACTIVE_POLL_MS = 100;
 const IDLE_POLL_MS = 1000;
@@ -141,11 +141,11 @@ export async function tailJsonl(
         continue;
       }
       fileState = newState;
-      process.stderr.write(`[agentscope] tailer: file rotated, reopened ${filePath}\n`);
+      process.stderr.write(`[claudelens] tailer: file rotated, reopened ${filePath}\n`);
     } else if (stat.size < fileState.offset) {
       // File truncated — reset offset
       fileState.offset = 0;
-      process.stderr.write(`[agentscope] tailer: file truncated, rewound ${filePath}\n`);
+      process.stderr.write(`[claudelens] tailer: file truncated, rewound ${filePath}\n`);
     }
 
     // Read new lines
@@ -159,7 +159,7 @@ export async function tailJsonl(
           const parsed = JSON.parse(line) as Record<string, unknown>;
           callback(parsed);
         } catch {
-          process.stderr.write(`[agentscope] tailer: bad JSON: ${line.slice(0, 80)}\n`);
+          process.stderr.write(`[claudelens] tailer: bad JSON: ${line.slice(0, 80)}\n`);
         }
       }
     } else {

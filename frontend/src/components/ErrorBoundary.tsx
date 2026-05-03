@@ -20,7 +20,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error("[AgentScope] ErrorBoundary caught:", error, info);
+    console.error("[ClaudeLens] ErrorBoundary caught:", error, info);
   }
 
   render(): ReactNode {

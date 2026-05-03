@@ -1,10 +1,10 @@
 {
-  "name": "agentscope",
+  "name": "claudelens",
   "version": "0.1.0",
   "type": "module",
   "description": "Real-time Claude Code agent observability tool",
   "bin": {
-    "agentscope": "./bin/agentscope.mjs"
+    "claudelens": "./bin/claudelens.mjs"
   },
   "scripts": {
     "dev": "tsx src/cli.ts",

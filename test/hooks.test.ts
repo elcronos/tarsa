@@ -34,7 +34,7 @@ interface Settings {
 function makeHookCommand(event: string): string {
   return (
     `jq -c -n --argjson e "$CLAUDE_HOOK_INPUT" ` +
-    `'$e + {"hook_event":"${event}","ts":now}' >> /tmp/agentscope.jsonl 2>/dev/null || true`
+    `'$e + {"hook_event":"${event}","ts":now}' >> /tmp/claudelens.jsonl 2>/dev/null || true`
   );
 }
 
@@ -105,7 +105,7 @@ let tmpDir: string;
 let settingsPath: string;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentscope-test-"));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudelens-test-"));
   settingsPath = path.join(tmpDir, "settings.json");
 });
 
@@ -161,13 +161,13 @@ describe("installHooks", () => {
     );
     expect(agentpeekStillPresent).toBe(true);
 
-    // agentscope entry was added
-    const agentscopeAdded = preToolBlocks.some((b: HookBlock) =>
+    // claudelens entry was added
+    const claudelensAdded = preToolBlocks.some((b: HookBlock) =>
       blockContainsMarker(b, MARKER)
     );
-    expect(agentscopeAdded).toBe(true);
+    expect(claudelensAdded).toBe(true);
 
-    // exactly 2 blocks for PreToolUse (one agentpeek, one agentscope)
+    // exactly 2 blocks for PreToolUse (one agentpeek, one claudelens)
     expect(preToolBlocks.length).toBe(2);
   });
 
@@ -188,8 +188,8 @@ describe("installHooks", () => {
 });
 
 describe("uninstallHooks", () => {
-  it("removes only agentscope entries", () => {
-    // Pre-populate with both agentpeek and agentscope hooks
+  it("removes only claudelens entries", () => {
+    // Pre-populate with both agentpeek and claudelens hooks
     const initial: Settings = {
       hooks: {
         PreToolUse: [
@@ -219,7 +219,7 @@ describe("uninstallHooks", () => {
       blocks.some((b: HookBlock) => b.hooks.some((h) => h.command.includes("agentpeek.jsonl")))
     ).toBe(true);
 
-    // agentscope removed
+    // claudelens removed
     expect(blocks.some((b: HookBlock) => blockContainsMarker(b, MARKER))).toBe(false);
   });
 

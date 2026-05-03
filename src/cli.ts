@@ -1,14 +1,14 @@
 /**
- * AgentScope CLI entry point.
+ * ClaudeLens CLI entry point.
  *
  * Phase B: installs hooks + starts DB + starts tailer + starts server + opens browser.
  *
  * Usage:
- *   agentscope                   # install hooks + start server + open browser
- *   agentscope --install-hooks   # install hooks only, then exit
- *   agentscope --uninstall       # remove agentscope hooks, then exit
- *   agentscope --port 8100       # server port (default 8100)
- *   agentscope --no-browser      # skip browser open
+ *   claudelens                   # install hooks + start server + open browser
+ *   claudelens --install-hooks   # install hooks only, then exit
+ *   claudelens --uninstall       # remove claudelens hooks, then exit
+ *   claudelens --port 8100       # server port (default 8100)
+ *   claudelens --no-browser      # skip browser open
  */
 
 import { installHooks, uninstallHooks, JSONL_PATH } from "./hooks.js";
@@ -113,9 +113,9 @@ async function main(): Promise<void> {
   if (opts.uninstall) {
     const changed = uninstallHooks();
     if (changed) {
-      console.log("[agentscope] Hooks removed from ~/.claude/settings.json");
+      console.log("[claudelens] Hooks removed from ~/.claude/settings.json");
     } else {
-      console.log("[agentscope] No AgentScope hooks found to remove.");
+      console.log("[claudelens] No ClaudeLens hooks found to remove.");
     }
     process.exit(0);
   }
@@ -123,9 +123,9 @@ async function main(): Promise<void> {
   // Always install hooks (idempotent)
   const changed = installHooks();
   if (changed) {
-    console.log("[agentscope] Hooks installed into ~/.claude/settings.json");
+    console.log("[claudelens] Hooks installed into ~/.claude/settings.json");
   } else {
-    console.log("[agentscope] Hooks already installed.");
+    console.log("[claudelens] Hooks already installed.");
   }
 
   if (opts.installOnly) {
@@ -133,16 +133,16 @@ async function main(): Promise<void> {
   }
 
   const runtime = detectRuntime();
-  console.log(`[agentscope] Runtime: ${runtime}`);
+  console.log(`[claudelens] Runtime: ${runtime}`);
 
   // Open database
   const db = await openDatabase();
   setDb(db);
-  console.log("[agentscope] Database ready.");
+  console.log("[claudelens] Database ready.");
 
   // Seed search index from persisted events
   const seeded = seedFromDatabase(db, 10000);
-  console.log(`[agentscope] search index seeded ${seeded} events`);
+  console.log(`[claudelens] search index seeded ${seeded} events`);
 
   // Create processor (pass db so it can update baselines on session end)
   const processor = new EventProcessor(db);
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
   // Start HTTP server
   const server = await startServer({ port: opts.port, processor, db });
   const url = `http://localhost:${opts.port}`;
-  console.log(`[agentscope] Server running at ${url}`);
+  console.log(`[claudelens] Server running at ${url}`);
 
   // Open browser after 1.5s delay
   if (!opts.noBrowser) {
@@ -160,12 +160,12 @@ async function main(): Promise<void> {
   }
 
   // Start tailing JSONL
-  console.log("[agentscope] Tailing /tmp/agentscope.jsonl ...");
+  console.log("[claudelens] Tailing /tmp/claudelens.jsonl ...");
 
   const controller = new AbortController();
 
   process.on("SIGINT", () => {
-    console.log("\n[agentscope] Shutting down...");
+    console.log("\n[claudelens] Shutting down...");
     processor.stopIdleCheck();
     controller.abort();
     server.close();
@@ -175,12 +175,12 @@ async function main(): Promise<void> {
 
   await tailJsonl(
     (raw) => processor.ingest(raw),
-    "/tmp/agentscope.jsonl",
+    "/tmp/claudelens.jsonl",
     controller.signal
   );
 }
 
 main().catch((err) => {
-  console.error("[agentscope] Fatal:", err);
+  console.error("[claudelens] Fatal:", err);
   process.exit(1);
 });

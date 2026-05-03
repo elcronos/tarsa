@@ -1,5 +1,5 @@
 /**
- * Install / uninstall AgentScope hooks in ~/.claude/settings.json.
+ * Install / uninstall ClaudeLens hooks in ~/.claude/settings.json.
  *
  * Hook structure mirrors agentpeek's proven shape:
  *   settings.hooks[event] = [{ hooks: [{ type, command, async }] }, ...]
@@ -12,8 +12,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const MARKER = "agentscope.jsonl";
-export const JSONL_PATH = "/tmp/agentscope.jsonl";
+export const MARKER = "claudelens.jsonl";
+export const JSONL_PATH = "/tmp/claudelens.jsonl";
 export const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 
 export const HOOK_EVENTS = [
@@ -42,10 +42,10 @@ interface HooksSettings {
 }
 
 function makeHookCommand(event: string): string {
-  // Delegate write to `agentscope --append-event` so a single fs.writeSync call
+  // Delegate write to `claudelens --append-event` so a single fs.writeSync call
   // performs the append. Inline jq + shell `>>` interleaves under load when
   // payloads exceed PIPE_BUF (~4KB on macOS), corrupting JSONL.
-  return `agentscope --append-event ${event} 2>/dev/null || true`;
+  return `claudelens --append-event ${event} 2>/dev/null || true`;
 }
 
 function makeHookBlock(event: string): HookBlock {
@@ -82,7 +82,7 @@ function blockContainsMarker(block: HookBlock, marker: string): boolean {
 }
 
 /**
- * Install AgentScope hooks into ~/.claude/settings.json.
+ * Install ClaudeLens hooks into ~/.claude/settings.json.
  * Idempotent — running twice produces identical output.
  * Never modifies entries that contain "agentpeek.jsonl".
  * Returns true if any changes were written.
@@ -115,8 +115,8 @@ export function installHooks(): boolean {
 }
 
 /**
- * Remove AgentScope hooks from ~/.claude/settings.json.
- * Only removes entries whose command contains "agentscope.jsonl".
+ * Remove ClaudeLens hooks from ~/.claude/settings.json.
+ * Only removes entries whose command contains "claudelens.jsonl".
  * Returns true if any changes were written.
  */
 export function uninstallHooks(): boolean {
@@ -153,7 +153,7 @@ export function uninstallHooks(): boolean {
 }
 
 /**
- * Returns true if all HOOK_EVENTS have at least one AgentScope entry installed.
+ * Returns true if all HOOK_EVENTS have at least one ClaudeLens entry installed.
  */
 export function hooksInstalled(): boolean {
   const settings = readSettings();

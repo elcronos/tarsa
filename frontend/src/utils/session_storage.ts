@@ -1,9 +1,9 @@
 /**
  * Utilities for persisting dismissed session IDs in localStorage.
- * Key: agentscope.dismissed_sessions (JSON array of string IDs)
+ * Key: claudelens.dismissed_sessions (JSON array of string IDs)
  */
 
-const STORAGE_KEY = "agentscope.dismissed_sessions";
+const STORAGE_KEY = "claudelens.dismissed_sessions";
 
 export function loadDismissed(): Set<string> {
   try {

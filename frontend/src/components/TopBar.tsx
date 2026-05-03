@@ -72,7 +72,7 @@ export default function TopBar({ activeView, onViewChange, status, onReconnect, 
     <div className="flex items-center h-10 px-3 border-b border-[var(--border)] bg-[var(--surface)] shrink-0 gap-4">
       {/* Brand */}
       <span className="font-mono text-xs font-semibold text-[var(--accent)] tracking-tight shrink-0">
-        agentscope
+        claudelens
       </span>
 
       <div className="w-px h-4 bg-[var(--border)] shrink-0" />

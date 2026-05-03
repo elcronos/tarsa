@@ -12,7 +12,7 @@ let tmpDir: string;
 let tmpFile: string;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentscope-tailer-"));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudelens-tailer-"));
   tmpFile = path.join(tmpDir, "test.jsonl");
 });
 

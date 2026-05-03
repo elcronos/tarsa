@@ -1,4 +1,4 @@
-# AgentScope
+# ClaudeLens
 
 Live observability for Claude Code agent sessions. Topology, timeline, tool I/O, transcripts, cost — visible while the session runs.
 
@@ -7,9 +7,9 @@ Live observability for Claude Code agent sessions. Topology, timeline, tool I/O,
 Requires Node 20+ (or Bun 1.x).
 
 ```sh
-npx agentscope        # zero-install run
+npx claudelens        # zero-install run
 # or
-npm install -g agentscope && agentscope
+npm install -g claudelens && claudelens
 ```
 
 First run installs hooks into `~/.claude/settings.json` and opens `http://localhost:8100`. Start a Claude Code session in any project; agents appear in real time.
@@ -34,14 +34,14 @@ First run installs hooks into `~/.claude/settings.json` and opens `http://localh
 | `--port <n>` | Listen on port `n` (default `8100`) |
 | `--no-browser` | Skip auto-opening browser |
 | `--install-hooks` | Install hooks into `~/.claude/settings.json`, then exit |
-| `--uninstall` | Remove AgentScope hooks, then exit |
+| `--uninstall` | Remove ClaudeLens hooks, then exit |
 | `--append-event <name>` | Read JSON from stdin, write to event log (used by hook commands) |
 
 ## Architecture
 
 ```
 Claude Code hooks
-  → agentscope --append-event → /tmp/agentscope.jsonl
+  → claudelens --append-event → /tmp/claudelens.jsonl
         ↓ tail
   src/tailer.ts        adaptive-poll JSONL tailer
   src/processor.ts     append-only event log + structural-sharing reducer
@@ -56,9 +56,9 @@ Claude Code hooks
 ```
 
 State locations:
-- Event log: `/tmp/agentscope.jsonl`
-- DB: `~/.agentscope/history.db` (sessions, agents, tool_calls, events, baselines)
-- Hooks: `~/.claude/settings.json` (entries marked with `agentscope.jsonl`)
+- Event log: `/tmp/claudelens.jsonl`
+- DB: `~/.claudelens/history.db` (sessions, agents, tool_calls, events, baselines)
+- Hooks: `~/.claude/settings.json` (entries marked with `claudelens.jsonl`)
 
 ## API
 
@@ -82,8 +82,8 @@ State locations:
 ## Dev
 
 ```sh
-git clone https://github.com/elcronos/agentscope
-cd agentscope
+git clone https://github.com/elcronos/claudelens
+cd claudelens
 npm install
 npm run dev                       # vite dev server (proxies to :8100)
 npx vitest run                    # tests
@@ -106,7 +106,7 @@ cd .. && npm install -g .         # install global with bundled assets
 - Claude Code only; other AI coding tools are out of scope.
 - Cost figures are estimates unless transcripts are available.
 - Search index seeds from the most recent 10 000 persisted events on startup.
-- AgentScope name overlaps with the unrelated [ModelScope/AgentScope](https://github.com/modelscope/agentscope) Python framework — verify before publishing to npm or trademark filings.
+- Renamed from agentscope (which collided with modelscope/agentscope).
 
 ## License
 

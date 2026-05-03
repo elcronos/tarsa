@@ -1,16 +1,16 @@
 /**
- * Schema migrations for AgentScope SQLite database.
+ * Schema migrations for ClaudeLens SQLite database.
  *
  * Each migration has a version number and SQL to execute.
  * applyMigrations() checks schema_version and runs any missing migrations in order.
- * DB path: ~/.agentscope/history.db
+ * DB path: ~/.claudelens/history.db
  */
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const DB_DIR = path.join(os.homedir(), ".agentscope");
+export const DB_DIR = path.join(os.homedir(), ".claudelens");
 export const DB_PATH = path.join(DB_DIR, "history.db");
 
 export function ensureDbDir(): void {

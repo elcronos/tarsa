@@ -17,7 +17,7 @@ describe("readTranscript", () => {
 
   beforeEach(() => {
     // Create a temporary ~/.claude/projects/<project>/<session>.jsonl structure
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentscope-thread-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudelens-thread-test-"));
     projectDir = path.join(tmpDir, "projects", "test-project");
     fs.mkdirSync(projectDir, { recursive: true });
   });

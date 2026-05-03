@@ -90,7 +90,7 @@ function broadcast(data: string): void {
         // already closed
       }
       toRemove.push(client);
-      process.stderr.write("[agentscope] SSE: slow client disconnected (buffer cap exceeded)\n");
+      process.stderr.write("[claudelens] SSE: slow client disconnected (buffer cap exceeded)\n");
       continue;
     }
     try {
@@ -394,7 +394,7 @@ export function createApp(opts: ServerOptions): Hono {
       briefCache.set(id, brief);
       return c.json({ brief, source: "llm" });
     } catch (err) {
-      process.stderr.write(`[agentscope] brief error: ${String(err)}\n`);
+      process.stderr.write(`[claudelens] brief error: ${String(err)}\n`);
       return c.json({ brief: null, source: "error", error: String(err) });
     }
   });
@@ -506,7 +506,7 @@ export function createApp(opts: ServerOptions): Hono {
 
     return new Response(
       `<html><body>
-        <h2>AgentScope</h2>
+        <h2>ClaudeLens</h2>
         <p>Frontend not built yet.</p>
         <p>API: <a href="/api/state">/api/state</a></p>
       </body></html>`,

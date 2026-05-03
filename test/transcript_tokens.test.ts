@@ -15,7 +15,7 @@ let projectsDir: string;
 let projectDir: string;
 
 beforeEach(() => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "agentscope-transcript-test-"));
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudelens-transcript-test-"));
   projectsDir = path.join(tempDir, ".claude", "projects");
   projectDir = path.join(projectsDir, "-Users-test-project");
   fs.mkdirSync(projectDir, { recursive: true });

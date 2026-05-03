@@ -1,0 +1,3 @@
+# Permitted legacy references — one exact substring per line.
+# Lines starting with # are comments (grep -F won't match them anyway).
+modelscope/agentscope

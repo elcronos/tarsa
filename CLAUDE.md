@@ -1,11 +1,11 @@
-# AgentScope
+# ClaudeLens
 
 ## Critical Rules
 
 - **All hooks must have `"async": true`** — blocking hooks kill Claude Code sessions
 - **SubagentStart/SubagentStop hooks are unreliable** — auto-discover agents from `agent_id` field on PreToolUse/PostToolUse events
-- **Don't break existing agentpeek hooks** — AgentScope uses `/tmp/agentscope.jsonl` (distinct from `/tmp/agentpeek.jsonl`)
-- **Hook marker**: `agentscope.jsonl` — never touch entries containing `agentpeek.jsonl`
+- **Don't break existing agentpeek hooks** — ClaudeLens uses `/tmp/claudelens.jsonl` (distinct from `/tmp/agentpeek.jsonl`)
+- **Hook marker**: `claudelens.jsonl` — never touch entries containing `agentpeek.jsonl`
 - **Port**: 8100 — avoid 8099 collision with agentpeek
 
 ## Code Style
@@ -25,6 +25,6 @@
 
 ## Distribution
 
-- `bunx agentscope` — Bun users (zero additional install)
-- `npx agentscope` — Node users (`better-sqlite3` requires native compile ~2-3s)
-- Entry shim: `bin/agentscope.mjs` — detects runtime, loads appropriate entry
+- `bunx claudelens` — Bun users (zero additional install)
+- `npx claudelens` — Node users (`better-sqlite3` requires native compile ~2-3s)
+- Entry shim: `bin/claudelens.mjs` — detects runtime, loads appropriate entry

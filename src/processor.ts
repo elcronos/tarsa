@@ -82,7 +82,7 @@ export class EventProcessor {
   ingest(raw: Record<string, unknown>): void {
     if (!isValidEventShape(raw)) {
       process.stderr.write(
-        `[agentscope] dropped invalid event shape: ${JSON.stringify(raw).slice(0, 200)}\n`
+        `[claudelens] dropped invalid event shape: ${JSON.stringify(raw).slice(0, 200)}\n`
       );
       return;
     }
@@ -178,7 +178,7 @@ export class EventProcessor {
     try {
       updateBaselines(this._db, sessionState);
     } catch (err) {
-      process.stderr.write(`[agentscope] updateBaselines error: ${String(err)}\n`);
+      process.stderr.write(`[claudelens] updateBaselines error: ${String(err)}\n`);
     }
 
     // Persist the session row first so agents.session_id FK resolves.
@@ -187,7 +187,7 @@ export class EventProcessor {
       try {
         this._db.upsertSession(session);
       } catch (err) {
-        process.stderr.write(`[agentscope] upsertSession error: ${String(err)}\n`);
+        process.stderr.write(`[claudelens] upsertSession error: ${String(err)}\n`);
       }
     }
 
@@ -235,14 +235,14 @@ export class EventProcessor {
           updates.anomaly_score = score.healthScore;
         }
       } catch (err) {
-        process.stderr.write(`[agentscope] scoreAgent error: ${String(err)}\n`);
+        process.stderr.write(`[claudelens] scoreAgent error: ${String(err)}\n`);
       }
 
       // Always upsert so child agents' parent_id FK resolves.
       try {
         this._db.upsertAgent({ ...agent, ...updates });
       } catch (err) {
-        process.stderr.write(`[agentscope] upsertAgent error: ${String(err)}\n`);
+        process.stderr.write(`[claudelens] upsertAgent error: ${String(err)}\n`);
       }
     }
   }
@@ -252,7 +252,7 @@ export class EventProcessor {
       try {
         fn(event, state);
       } catch (err) {
-        process.stderr.write(`[agentscope] subscriber error: ${String(err)}\n`);
+        process.stderr.write(`[claudelens] subscriber error: ${String(err)}\n`);
       }
     }
   }
