@@ -6,7 +6,7 @@
  * Dynamic import() ensures the unused binding is never required.
  */
 
-import type { Agent, Event, Session, State, ToolCall } from "./models.js";
+import type { Agent, Event, Iteration, Session, State, ToolCall } from "./models.js";
 import { isBun } from "./runtime.js";
 import { applyMigrations, ensureDbDir, DB_PATH, type Migratable } from "./migrations.js";
 import { costEstimate } from "./insights.js";
@@ -39,6 +39,11 @@ export interface Database {
   listSessions(): Session[];
   getSession(id: string): Session | null;
   updateBaseline(agentType: string, durationMs: number, toolCount: number, costUsd: number, toolSequenceCommon: string | null): void;
+  upsertIteration(sessionId: string, it: Iteration): void;
+  listIterations(sessionId: string): Iteration[];
+  listSessionsMissingCwd(): string[];
+  setSessionCwd(sessionId: string, cwd: string): void;
+  setBudget(sessionId: string, budgetUsd: number, killOnExceed: number): void;
   close(): void;
 }
 
@@ -71,12 +76,17 @@ class SqliteDatabase implements Database {
   upsertSession(s: Session): void {
     this.db
       .prepare(
-        `INSERT INTO sessions (id, started_at, ended_at, project_path, root_agent_id, status, name)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO sessions
+           (id, started_at, ended_at, project_path, root_agent_id, status, name,
+            cwd, budget_usd, kill_on_exceed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            ended_at = COALESCE(excluded.ended_at, ended_at),
            status = excluded.status,
-           name = COALESCE(excluded.name, name)`
+           name = COALESCE(excluded.name, name),
+           cwd = COALESCE(excluded.cwd, cwd),
+           budget_usd = COALESCE(excluded.budget_usd, budget_usd),
+           kill_on_exceed = COALESCE(excluded.kill_on_exceed, kill_on_exceed)`
       )
       .run(
         s.id,
@@ -85,8 +95,92 @@ class SqliteDatabase implements Database {
         s.project_path,
         s.root_agent_id,
         s.status,
-        s.name ?? null
+        s.name ?? null,
+        s.cwd ?? null,
+        s.budget_usd ?? null,
+        s.kill_on_exceed == null ? null : (s.kill_on_exceed ? 1 : 0)
       );
+  }
+
+  upsertIteration(sessionId: string, it: Iteration): void {
+    this.db
+      .prepare(
+        `INSERT INTO iterations
+           (session_id, n, started_at, ended_at, tool_count, cost_usd, confidence, marker_source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(session_id, n) DO UPDATE SET
+           ended_at = COALESCE(excluded.ended_at, ended_at),
+           tool_count = excluded.tool_count,
+           cost_usd = excluded.cost_usd,
+           confidence = excluded.confidence,
+           marker_source = excluded.marker_source`
+      )
+      .run(
+        sessionId,
+        it.n,
+        it.started_at,
+        it.ended_at ?? null,
+        it.tool_count,
+        it.cost_usd ?? 0,
+        it.confidence,
+        it.marker_source
+      );
+  }
+
+  listIterations(sessionId: string): Iteration[] {
+    const rows = this.db
+      .prepare(
+        `SELECT n, started_at, ended_at, tool_count, cost_usd, confidence, marker_source
+         FROM iterations WHERE session_id = ? ORDER BY n ASC`
+      )
+      .all(sessionId) as Array<{
+        n: number;
+        started_at: number;
+        ended_at: number | null;
+        tool_count: number;
+        cost_usd: number;
+        confidence: number;
+        marker_source: string;
+      }>;
+    return rows.map((r) => ({
+      n: r.n,
+      started_at: r.started_at,
+      ended_at: r.ended_at,
+      tool_count: r.tool_count,
+      cost_usd: r.cost_usd,
+      confidence: r.confidence,
+      marker_source: r.marker_source as Iteration["marker_source"],
+    }));
+  }
+
+  listSessionsMissingCwd(): string[] {
+    const rows = this.db
+      .prepare(`SELECT id FROM sessions WHERE cwd IS NULL OR cwd = ''`)
+      .all() as Array<{ id: string }>;
+    return rows.map((r) => r.id);
+  }
+
+  setSessionCwd(sessionId: string, cwd: string): void {
+    this.db
+      .prepare(`UPDATE sessions SET cwd = ? WHERE id = ? AND (cwd IS NULL OR cwd = '')`)
+      .run(cwd, sessionId);
+  }
+
+  setBudget(sessionId: string, budgetUsd: number, killOnExceed: number): void {
+    // UPSERT: insert a stub session row if missing, or update the budget cols.
+    // The session may not exist in DB yet (live-only), so use INSERT OR IGNORE
+    // followed by UPDATE — keeps existing started_at/etc untouched.
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO sessions
+           (id, started_at, ended_at, project_path, root_agent_id, status, name,
+            cwd, budget_usd, kill_on_exceed)
+         VALUES (?, ?, NULL, '', '', 'active', NULL, NULL, ?, ?)`
+      )
+      .run(sessionId, Date.now(), budgetUsd, killOnExceed);
+    this.db
+      .prepare(`UPDATE sessions SET budget_usd = ?, kill_on_exceed = ? WHERE id = ?`)
+      .run(budgetUsd, killOnExceed, sessionId);
   }
 
   upsertAgent(a: Agent): void {
@@ -326,6 +420,9 @@ class SqliteDatabase implements Database {
         root_agent_id: string;
         status: string;
         name: string | null;
+        cwd: string | null;
+        budget_usd: number | null;
+        kill_on_exceed: number | null;
       }>;
 
     return rows.map((r) => ({
@@ -336,6 +433,9 @@ class SqliteDatabase implements Database {
       root_agent_id: r.root_agent_id,
       status: r.status as Session["status"],
       name: r.name,
+      cwd: r.cwd ?? undefined,
+      budget_usd: r.budget_usd ?? undefined,
+      kill_on_exceed: r.kill_on_exceed == null ? undefined : !!r.kill_on_exceed,
     }));
   }
 
@@ -351,6 +451,9 @@ class SqliteDatabase implements Database {
           root_agent_id: string;
           status: string;
           name: string | null;
+          cwd: string | null;
+          budget_usd: number | null;
+          kill_on_exceed: number | null;
         }
       | undefined;
 
@@ -363,6 +466,9 @@ class SqliteDatabase implements Database {
       root_agent_id: row.root_agent_id,
       status: row.status as Session["status"],
       name: row.name,
+      cwd: row.cwd ?? undefined,
+      budget_usd: row.budget_usd ?? undefined,
+      kill_on_exceed: row.kill_on_exceed == null ? undefined : !!row.kill_on_exceed,
     };
   }
 

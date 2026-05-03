@@ -19,10 +19,15 @@ import type {
   Agent,
   Edge,
   Event,
+  Iteration,
   Session,
   State,
   ToolCall,
 } from "./models.js";
+
+/** Window for marker C (repeated identical prompt heuristic) */
+const REPEAT_PROMPT_WINDOW_MS = 5 * 60 * 1000;
+const RALPH_ITERATION_REGEX = /\[RALPH \+ ULTRAWORK - ITERATION (\d+)\/(\d+)\]/i;
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -77,6 +82,7 @@ export function emptyState(): State {
     tool_calls: new Map(),
     events: [],
     pending_subagents: new Map(),
+    iterations: new Map(),
   };
 }
 
@@ -100,6 +106,9 @@ export function cloneState(s: State): State {
     pending_subagents: new Map(
       Array.from(s.pending_subagents.entries()).map(([k, v]) => [k, [...v]])
     ),
+    iterations: new Map(
+      Array.from(s.iterations.entries()).map(([k, v]) => [k, [...v]])
+    ),
   };
 }
 
@@ -115,6 +124,7 @@ function withSessions(s: State, sessions: Map<string, Session>): State {
     tool_calls: s.tool_calls,
     events: s.events,
     pending_subagents: s.pending_subagents,
+    iterations: s.iterations,
   };
 }
 
@@ -126,6 +136,7 @@ function withAgents(s: State, agents: Map<string, Agent>): State {
     tool_calls: s.tool_calls,
     events: s.events,
     pending_subagents: s.pending_subagents,
+    iterations: s.iterations,
   };
 }
 
@@ -137,6 +148,7 @@ function withToolCalls(s: State, tool_calls: Map<string, ToolCall[]>): State {
     tool_calls,
     events: s.events,
     pending_subagents: s.pending_subagents,
+    iterations: s.iterations,
   };
 }
 
@@ -148,6 +160,7 @@ function withEdges(s: State, edges: Edge[]): State {
     tool_calls: s.tool_calls,
     events: s.events,
     pending_subagents: s.pending_subagents,
+    iterations: s.iterations,
   };
 }
 
@@ -159,6 +172,7 @@ function withEvents(s: State, events: Event[]): State {
     tool_calls: s.tool_calls,
     events,
     pending_subagents: s.pending_subagents,
+    iterations: s.iterations,
   };
 }
 
@@ -173,6 +187,19 @@ function withPendingSubagents(
     tool_calls: s.tool_calls,
     events: s.events,
     pending_subagents,
+    iterations: s.iterations,
+  };
+}
+
+function withIterations(s: State, iterations: Map<string, Iteration[]>): State {
+  return {
+    sessions: s.sessions,
+    agents: s.agents,
+    edges: s.edges,
+    tool_calls: s.tool_calls,
+    events: s.events,
+    pending_subagents: s.pending_subagents,
+    iterations,
   };
 }
 
@@ -243,6 +270,7 @@ export function ensureSession(state: State, sessionId: string, tsMs: number): St
     tool_calls,
     events: state.events,
     pending_subagents: state.pending_subagents,
+    iterations: state.iterations,
   };
 }
 
@@ -300,6 +328,7 @@ export function ensureAgent(
     tool_calls,
     events: state.events,
     pending_subagents: state.pending_subagents,
+    iterations: state.iterations,
   };
 }
 
@@ -342,6 +371,7 @@ export function migrateAgentId(s: State, fromId: string, toId: string, tsMs: num
     tool_calls,
     events: s.events,
     pending_subagents: s.pending_subagents,
+    iterations: s.iterations,
   };
 }
 
@@ -435,6 +465,7 @@ export function handlePreToolUse(s: State, e: Event): State {
         tool_calls,
         events: next.events,
         pending_subagents,
+        iterations: next.iterations,
       };
     }
   }
@@ -670,6 +701,7 @@ export function handleSubagentStart(s: State, e: Event): State {
     tool_calls,
     events: s.events,
     pending_subagents: s.pending_subagents,
+    iterations: s.iterations,
   };
 }
 
@@ -721,6 +753,117 @@ export function handleStop(s: State, e: Event): State {
     return setAgent(s, rootId, { ...root, status: "awaiting", last_seen_ms: tsMs });
   }
   return s;
+}
+
+// ── Iteration detection ────────────────────────────────────────────────
+
+/**
+ * Extract the prompt text from a UserPromptSubmit event payload.
+ * Claude Code carries it under `prompt`; older payloads used `message`.
+ */
+function extractPrompt(e: Event): string {
+  const p = (e as Record<string, unknown>)["prompt"];
+  if (typeof p === "string") return p;
+  const m = (e as Record<string, unknown>)["message"];
+  if (typeof m === "string") return m;
+  return "";
+}
+
+/**
+ * Classify a UserPromptSubmit event into an iteration marker.
+ * Returns null when no marker matches.
+ */
+function classifyMarker(
+  e: Event,
+  prevPrompts: Array<{ prompt: string; ts: number }>
+): { n: number | null; confidence: number; source: "regex" | "env" | "repeat" } | null {
+  const prompt = extractPrompt(e);
+
+  // Marker A: regex
+  const m = prompt.match(RALPH_ITERATION_REGEX);
+  if (m && m[1]) {
+    return { n: parseInt(m[1], 10), confidence: 0.95, source: "regex" };
+  }
+
+  // Marker B: env-injected ralph_active flag
+  const ralphActive = (e as Record<string, unknown>)["ralph_active"];
+  if (ralphActive === "1" || ralphActive === 1 || ralphActive === true) {
+    return { n: null, confidence: 0.85, source: "env" };
+  }
+
+  // Marker C: repeated identical prompt within window
+  if (prompt.trim()) {
+    const recent = prevPrompts.filter((p) => e.ts - p.ts <= REPEAT_PROMPT_WINDOW_MS);
+    const matches = recent.filter((p) => p.prompt === prompt);
+    if (matches.length >= 2) {
+      // Third+ identical prompt = at least iteration 2 (1-indexed)
+      return { n: null, confidence: 0.75, source: "repeat" };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Handle UserPromptSubmit: open a new iteration (closing the previous) when
+ * a marker matches. Pure — operates on the iterations Map only.
+ */
+export function handleUserPromptSubmit(s: State, e: Event): State {
+  const sessionId = e.session_id;
+  const tsMs = e.ts;
+
+  // Build a list of recent prompts in this session for marker C
+  const prevPrompts: Array<{ prompt: string; ts: number }> = [];
+  for (const ev of s.events) {
+    if (ev.session_id !== sessionId) continue;
+    if (String(ev.hook_event ?? "") !== "UserPromptSubmit") continue;
+    const p = extractPrompt(ev);
+    if (p) prevPrompts.push({ prompt: p, ts: ev.ts });
+  }
+
+  const marker = classifyMarker(e, prevPrompts);
+  if (!marker) return s;
+
+  const existing = s.iterations.get(sessionId) ?? [];
+  // Determine iteration number
+  const nextN = marker.n ?? (existing.length > 0 ? (existing[existing.length - 1]?.n ?? 0) + 1 : 1);
+
+  // Close previous open iteration
+  const closed = existing.map((it) =>
+    it.ended_at == null ? { ...it, ended_at: tsMs } : it
+  );
+
+  // Skip duplicate iteration numbers (idempotency on replay)
+  if (closed.some((it) => it.n === nextN)) return s;
+
+  const newIter: Iteration = {
+    n: nextN,
+    started_at: tsMs,
+    ended_at: null,
+    tool_count: 0,
+    confidence: marker.confidence,
+    marker_source: marker.source,
+  };
+
+  const next = new Map(s.iterations);
+  next.set(sessionId, [...closed, newIter]);
+  return withIterations(s, next);
+}
+
+/**
+ * Increment tool_count on the open iteration for a session, if any.
+ */
+function bumpIterationToolCount(s: State, sessionId: string): State {
+  const list = s.iterations.get(sessionId);
+  if (!list || list.length === 0) return s;
+  const idx = list.length - 1;
+  const last = list[idx];
+  if (!last || last.ended_at != null) return s;
+  const updated = [...list];
+  updated[idx] = { ...last, tool_count: last.tool_count + 1 };
+  const next = new Map(s.iterations);
+  next.set(sessionId, updated);
+  return withIterations(s, next);
 }
 
 // ── Core public API ────────────────────────────────────────────────────
@@ -795,8 +938,10 @@ export function applyEvent(state: State, e: Event): State {
   // Dispatch to handler
   const hook = String(normalizedEvent.hook_event ?? "");
   switch (hook) {
-    case "PreToolUse":
-      return handlePreToolUse(next, normalizedEvent);
+    case "PreToolUse": {
+      const after = handlePreToolUse(next, normalizedEvent);
+      return bumpIterationToolCount(after, sessionId);
+    }
     case "PostToolUse":
       return handlePostToolUse(next, normalizedEvent, false);
     case "PostToolUseFailure":
@@ -807,6 +952,8 @@ export function applyEvent(state: State, e: Event): State {
       return handleSubagentStop(next, normalizedEvent);
     case "Stop":
       return handleStop(next, normalizedEvent);
+    case "UserPromptSubmit":
+      return handleUserPromptSubmit(next, normalizedEvent);
     default:
       return next;
   }

@@ -12,18 +12,29 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 import { isBun } from "./runtime.js";
 import type { EventProcessor } from "./processor.js";
 import type { Database } from "./db.js";
 import type { Event, State } from "./models.js";
 import { bottleneck, costEstimate, parallelismGaps, stuckSignals, errorRecovery, agentPerformanceTable, agentTypeProfiles } from "./insights.js";
 import { searchEvents, indexEvent, buildIndex } from "./search.js";
+import { detectBudgetExceeded } from "./insights.js";
 import { readTranscript, readAgentTokens, firstUserMessage, lastAssistantMessage, readTranscriptByPath } from "./transcript.js";
 
 // ── Static dir resolution ─────────────────────────────────────────────────
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STATIC_DIR = path.join(__dirname, "static");
+
+// Resolve once at module load so symlinks on macOS (e.g. /System/Volumes/Data/)
+// are handled correctly and cannot be bypassed by the request path.
+let STATIC_DIR_REAL: string;
+try {
+  STATIC_DIR_REAL = fs.realpathSync(STATIC_DIR);
+} catch {
+  STATIC_DIR_REAL = STATIC_DIR;
+}
 
 // ── SSE client registry ───────────────────────────────────────────────────
 
@@ -35,8 +46,27 @@ interface SseClient {
 const SSE_BUFFER_CAP = 1_000_000; // 1 MB
 const SSE_KEEPALIVE_MS = 30_000;
 const SSE_SNAPSHOT_CAP = 1_000;
+const MAX_SSE_CLIENTS = 32;
 
 const clients = new Set<SseClient>();
+
+// ── CSRF token registry ───────────────────────────────────────────────────
+
+interface CsrfEntry {
+  connId: string;
+  createdAt: number;
+  // budget POST rate limiting
+  budgetPostCount: number;
+  budgetWindowStart: number;
+}
+
+const CSRF_TOKENS = new Map<string, CsrfEntry>();
+const BUDGET_RATE_LIMIT = 60; // per minute per connection
+const BUDGET_WINDOW_MS = 60_000;
+
+function generateCsrfToken(): string {
+  return crypto.randomBytes(16).toString("hex");
+}
 
 // ── On-demand LLM brief (in-memory only, no SQLite) ───────────────────────
 const briefCache = new Map<string, string>();
@@ -127,15 +157,20 @@ export function createApp(opts: ServerOptions): Hono {
   const app = new Hono();
 
   // CORS — restrict to known local origins only
+  // In production, drop the Vite dev-server origin (MED-4)
+  const corsOrigins: string[] = [
+    "http://localhost:8100",
+    "http://127.0.0.1:8100",
+  ];
+  if (process.env.NODE_ENV !== "production") {
+    corsOrigins.push("http://localhost:5173");
+  }
   app.use(
     "*",
     cors({
-      origin: [
-        "http://localhost:8100",
-        "http://127.0.0.1:8100",
-        "http://localhost:5173",
-      ],
+      origin: corsOrigins,
       allowMethods: ["GET", "POST", "OPTIONS"],
+      allowHeaders: ["X-Claudelens-CSRF"],
     })
   );
 
@@ -164,12 +199,28 @@ export function createApp(opts: ServerOptions): Hono {
 
   // ── GET /api/events/stream (SSE) ────────────────────────────────────
   app.get("/api/events/stream", (c) => {
+    // MED-5: cap concurrent SSE connections
+    if (clients.size >= MAX_SSE_CLIENTS) {
+      process.stderr.write("[claudelens] SSE: connection rejected (MAX_SSE_CLIENTS reached)\n");
+      return c.text("Too many connections. Restart claudelens or reduce browser tabs.", 429);
+    }
+
     const lastEventId = c.req.header("Last-Event-ID");
     const now = Date.now();
     const lastSeenTs = lastEventId ? parseInt(lastEventId, 10) : 0;
 
     const MAX_CATCHUP_MS = 60_000;
     const needsFullSnapshot = !lastEventId || now - lastSeenTs > MAX_CATCHUP_MS;
+
+    // Issue a per-connection CSRF token (CSRF)
+    const connId = crypto.randomUUID();
+    const csrfToken = generateCsrfToken();
+    CSRF_TOKENS.set(csrfToken, {
+      connId,
+      createdAt: Date.now(),
+      budgetPostCount: 0,
+      budgetWindowStart: Date.now(),
+    });
 
     let client: SseClient | null = null;
     let keepaliveTimer: ReturnType<typeof setInterval> | null = null;
@@ -180,6 +231,12 @@ export function createApp(opts: ServerOptions): Hono {
         clients.add(client);
 
         const enc = new TextEncoder();
+
+        // Send CSRF token as first event
+        const csrfMsg =
+          `event: csrf-token\n` +
+          `data: ${JSON.stringify({ token: csrfToken })}\n\n`;
+        controller.enqueue(enc.encode(csrfMsg));
 
         // Send initial snapshot
         const snapshotEvents = needsFullSnapshot
@@ -207,6 +264,8 @@ export function createApp(opts: ServerOptions): Hono {
       cancel() {
         if (client !== null) clients.delete(client);
         if (keepaliveTimer !== null) clearInterval(keepaliveTimer);
+        // Clean up CSRF token on disconnect
+        CSRF_TOKENS.delete(csrfToken);
       },
     });
 
@@ -224,6 +283,60 @@ export function createApp(opts: ServerOptions): Hono {
   app.post("/api/reset", (c) => {
     processor.reset();
     return c.json({ status: "reset" });
+  });
+
+  // ── POST /api/budget ─────────────────────────────────────────────────
+  // CSRF-protected; requires X-Claudelens-CSRF header with a valid token
+  // issued via the SSE stream. Rate-limited to 60 POSTs/min per connection.
+  app.post("/api/budget", async (c) => {
+    const token = c.req.header("X-Claudelens-CSRF");
+    if (!token) {
+      return c.json({ error: "Missing CSRF token" }, 403);
+    }
+    const entry = CSRF_TOKENS.get(token);
+    if (!entry) {
+      return c.json({ error: "Invalid CSRF token" }, 403);
+    }
+
+    // Per-connection rate limit: 60 budget POSTs/minute
+    const now = Date.now();
+    if (now - entry.budgetWindowStart > BUDGET_WINDOW_MS) {
+      entry.budgetPostCount = 0;
+      entry.budgetWindowStart = now;
+    }
+    entry.budgetPostCount++;
+    if (entry.budgetPostCount > BUDGET_RATE_LIMIT) {
+      return c.json({ error: "Rate limit exceeded" }, 429);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json() as Record<string, unknown>;
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const { session_id, usd, kill_on_exceed } = body;
+    if (typeof session_id !== "string" || typeof usd !== "number") {
+      return c.json({ error: "Missing session_id or usd" }, 400);
+    }
+
+    // Persist budget to DB
+    try {
+      db.setBudget(session_id, usd, kill_on_exceed === true ? 1 : 0);
+    } catch (err) {
+      process.stderr.write(`[claudelens] setBudget error: ${String(err)}\n`);
+    }
+
+    // Update in-memory session as well so the next event-driven budget
+    // detection sees the freshly-set threshold.
+    const liveSession = processor.state.sessions.get(session_id);
+    if (liveSession) {
+      liveSession.budget_usd = usd;
+      liveSession.kill_on_exceed = kill_on_exceed === true;
+    }
+
+    return c.json({ status: "ok", session_id, usd, kill_on_exceed: kill_on_exceed === true });
   });
 
   // ── GET /api/history ────────────────────────────────────────────────
@@ -473,30 +586,53 @@ export function createApp(opts: ServerOptions): Hono {
   });
 
   // ── Static files + SPA fallback ─────────────────────────────────────
+  // HIGH-1: path traversal guard via realpathSync containment check.
+  // c.req.path is already URL-decoded by Hono — do NOT call decodeURIComponent.
   app.get("*", (c) => {
     const reqPath = c.req.path;
 
-    if (fs.existsSync(STATIC_DIR)) {
-      const filePath = path.join(STATIC_DIR, reqPath === "/" ? "index.html" : reqPath);
-      if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-        const content = fs.readFileSync(filePath);
-        const ext = path.extname(filePath);
-        const mimeTypes: Record<string, string> = {
-          ".html": "text/html",
-          ".js": "application/javascript",
-          ".css": "text/css",
-          ".json": "application/json",
-          ".png": "image/png",
-          ".svg": "image/svg+xml",
-          ".ico": "image/x-icon",
-          ".woff2": "font/woff2",
-          ".woff": "font/woff",
-        };
-        const contentType = mimeTypes[ext] ?? "application/octet-stream";
-        return new Response(content, { headers: { "Content-Type": contentType } });
+    if (fs.existsSync(STATIC_DIR_REAL)) {
+      // Resolve the candidate path and verify it stays inside STATIC_DIR_REAL
+      const relative = reqPath === "/" ? "index.html" : reqPath.replace(/^\//, "");
+      const candidate = path.resolve(STATIC_DIR_REAL, relative);
+
+      let realCandidate: string;
+      try {
+        realCandidate = fs.realpathSync(candidate);
+      } catch {
+        // File doesn't exist; fall through to SPA index or 404
+        realCandidate = "";
       }
 
-      const indexPath = path.join(STATIC_DIR, "index.html");
+      if (
+        realCandidate &&
+        (realCandidate === STATIC_DIR_REAL ||
+          realCandidate.startsWith(STATIC_DIR_REAL + path.sep))
+      ) {
+        if (fs.statSync(realCandidate).isFile()) {
+          const content = fs.readFileSync(realCandidate);
+          const ext = path.extname(realCandidate);
+          const mimeTypes: Record<string, string> = {
+            ".html": "text/html",
+            ".js": "application/javascript",
+            ".css": "text/css",
+            ".json": "application/json",
+            ".png": "image/png",
+            ".svg": "image/svg+xml",
+            ".ico": "image/x-icon",
+            ".woff2": "font/woff2",
+            ".woff": "font/woff",
+          };
+          const contentType = mimeTypes[ext] ?? "application/octet-stream";
+          return new Response(content, { headers: { "Content-Type": contentType } });
+        }
+      } else if (realCandidate && !realCandidate.startsWith(STATIC_DIR_REAL + path.sep)) {
+        // Path escapes static dir — reject
+        return c.notFound();
+      }
+
+      // SPA fallback
+      const indexPath = path.join(STATIC_DIR_REAL, "index.html");
       if (fs.existsSync(indexPath)) {
         return new Response(fs.readFileSync(indexPath), {
           headers: { "Content-Type": "text/html" },
@@ -530,11 +666,30 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
   // Build full-text search index from existing events
   buildIndex(Array.from(processor.events));
 
+  // Track sessions whose budget has already been reported as exceeded so
+  // we only emit one budget-exceeded event per crossing.
+  const budgetExceededSessions = new Set<string>();
+
   // Wire processor events to SSE broadcast + search index
   processor.subscribe((event: Event) => {
     indexEvent(event);
     const msg = `id: ${event.ts}\ndata: ${JSON.stringify({ type: "event", event })}\n\n`;
     broadcast(msg);
+
+    // Budget-exceeded detection: emit once per session per crossing.
+    try {
+      const exceeded = detectBudgetExceeded(processor.state);
+      for (const be of exceeded) {
+        if (budgetExceededSessions.has(be.session_id)) continue;
+        budgetExceededSessions.add(be.session_id);
+        const beMsg =
+          `event: budget-exceeded\n` +
+          `data: ${JSON.stringify(be)}\n\n`;
+        broadcast(beMsg);
+      }
+    } catch (err) {
+      process.stderr.write(`[claudelens] budget detect error: ${String(err)}\n`);
+    }
   });
 
   if (isBun()) {

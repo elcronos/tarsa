@@ -12,7 +12,7 @@
  */
 
 import { applyEvent, emptyState } from "./replay.js";
-import type { Event, State } from "./models.js";
+import type { Agent, Event, State } from "./models.js";
 import type { Database } from "./db.js";
 import { updateBaselines } from "./db.js";
 import { scoreAgent } from "./scorer.js";
@@ -191,8 +191,24 @@ export class EventProcessor {
       }
     }
 
+    // Persist iterations (Critic fix #11 / N6): only those clearing the
+    // confidence + tool_count threshold get cross-restart history. Honor the
+    // CLAUDELENS_ITERATION_DETECTION=0 opt-out from --no-iteration-detection.
+    if (process.env["CLAUDELENS_ITERATION_DETECTION"] !== "0") {
+      const iters = this._state.iterations.get(sessionId) ?? [];
+      for (const it of iters) {
+        if (it.confidence >= 0.85 && it.tool_count >= 3) {
+          try {
+            this._db.upsertIteration(sessionId, it);
+          } catch (err) {
+            process.stderr.write(`[claudelens] upsertIteration error: ${String(err)}\n`);
+          }
+        }
+      }
+    }
+
     // Topological order: persist parents before children so parent_id FK resolves.
-    const ordered: typeof sessionAgents extends Map<string, infer V> ? V[] : never = [];
+    const ordered: Agent[] = [];
     const persisted = new Set<string>();
     const remaining = new Map(sessionAgents);
     while (remaining.size > 0) {

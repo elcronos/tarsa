@@ -57,66 +57,7 @@ export function buildRows(state: State): AgentRow[] {
     return a.first_seen_ms - b.first_seen_ms;
   });
 
-  // Assign row indices: group siblings (same parent_id)
-  // Sequential siblings can share row; parallel siblings get distinct visual rows
-  const rowIndexMap = new Map<string, number>();
-  let nextRow = 0;
-
-  // Process agents in sorted order, tracking "last end time" per sibling group row
-  // Each parent gets its own row-space allocation
-  const parentRowState = new Map<string, { usedRows: Array<number> }>();
-
-  for (const agent of sorted) {
-    const depth = depthMap.get(agent.id) ?? 0;
-    const endMs = agent.status === "active" ? now : agent.last_seen_ms;
-    const parentId = agent.parent_id ?? "__root__";
-
-    if (!parentRowState.has(parentId)) {
-      parentRowState.set(parentId, { usedRows: [] });
-    }
-    const ps = parentRowState.get(parentId)!;
-
-    // Find a row in this sibling group where this agent fits (no overlap)
-    // We track row assignments per sibling group
-    const siblingGroupKey = `${parentId}:${depth}`;
-    if (!parentRowState.has(siblingGroupKey)) {
-      parentRowState.set(siblingGroupKey, { usedRows: [] });
-    }
-    const groupState = parentRowState.get(siblingGroupKey)!;
-    void ps; // used above for initialization
-
-    // Each "slot" in usedRows stores the end time of the last agent placed there
-    let placedInRow = -1;
-    const slotEndTimes: number[] = (groupState.usedRows as unknown as number[]);
-
-    for (let slot = 0; slot < slotEndTimes.length; slot++) {
-      const slotEnd = slotEndTimes[slot]!;
-      if (agent.first_seen_ms >= slotEnd) {
-        // Sequential — fits in this slot (same row as previous)
-        slotEndTimes[slot] = endMs;
-        // Find the actual row index that was assigned to this slot
-        placedInRow = slot;
-        break;
-      }
-    }
-
-    if (placedInRow === -1) {
-      // Parallel — needs a new row
-      slotEndTimes.push(endMs);
-      placedInRow = slotEndTimes.length - 1;
-      nextRow++;
-    }
-
-    // Map slot to actual SVG row index: use a stable row per slot in sibling group
-    const siblingRowBase = `${siblingGroupKey}:slot:${placedInRow}`;
-    if (!rowIndexMap.has(siblingRowBase)) {
-      rowIndexMap.set(siblingRowBase, nextRow - (placedInRow === slotEndTimes.length - 1 ? 0 : 0));
-    }
-
-    rowIndexMap.set(agent.id, rowIndexMap.get(siblingRowBase) ?? nextRow);
-  }
-
-  // Re-assign row indices compactly: walk sorted agents and assign sequential row index
+  // Assign row indices compactly: walk sorted agents and assign sequential row index
   // while grouping parallel siblings together on the same visual row offset
   const compactRowMap = new Map<string, number>();
   let currentRow = 0;
@@ -249,6 +190,38 @@ export default function TimelineView({
 
   const svgHeight = totalRows * ROW_HEIGHT + AXIS_HEIGHT + 8;
 
+  // Iteration bands across all visible sessions
+  const iterationBands = useMemo(() => {
+    const sessionIds = new Set<string>();
+    for (const r of rows) sessionIds.add(r.agent.session_id);
+    const out: Array<{
+      sessionId: string;
+      n: number;
+      tool_count: number;
+      confidence: number;
+      marker_source: string;
+      started_at: number;
+      ended_at: number;
+      isOpen: boolean;
+    }> = [];
+    for (const sid of sessionIds) {
+      const iters = state.iterations.get(sid) ?? [];
+      for (const it of iters) {
+        out.push({
+          sessionId: sid,
+          n: it.n,
+          tool_count: it.tool_count,
+          confidence: it.confidence,
+          marker_source: it.marker_source,
+          started_at: it.started_at,
+          ended_at: it.ended_at ?? Date.now(),
+          isOpen: it.ended_at === null,
+        });
+      }
+    }
+    return out;
+  }, [state.iterations, rows]);
+
   const barColor = useCallback((agent: Agent): string => {
     const isStuck =
       agent.status === "active" &&
@@ -362,6 +335,43 @@ export default function TimelineView({
             );
           })}
         </g>
+
+        {/* Iteration bands — render BEHIND agent rows */}
+        {iterationBands.map((band, i) => {
+          const x1 = toX(Math.max(band.started_at, minTs), chartWidth);
+          const x2 = toX(Math.min(band.ended_at, maxTs), chartWidth);
+          const w = Math.max(x2 - x1, 2);
+          const bandHeight = totalRows * ROW_HEIGHT;
+          const opacity = band.isOpen ? 0.22 : 0.13;
+          const fill = i % 2 === 0 ? "#6366f1" : "#8b5cf6";
+          const confidencePct = Math.round(band.confidence * 100);
+          return (
+            <g key={`iter-${band.sessionId}-${band.n}`}>
+              <rect
+                x={x1}
+                y={AXIS_HEIGHT}
+                width={w}
+                height={bandHeight}
+                fill={fill}
+                fillOpacity={opacity}
+                pointerEvents="none"
+              />
+              <title>
+                {`iter #${band.n} · ${band.tool_count} calls · ${confidencePct}% (${band.marker_source})`}
+              </title>
+              <text
+                x={4}
+                y={AXIS_HEIGHT + 10}
+                fontSize={8}
+                fontFamily="var(--font-mono)"
+                fill="#a5b4fc"
+                pointerEvents="none"
+              >
+                {`iter #${band.n} · ${band.tool_count} calls · ${confidencePct}%`}
+              </text>
+            </g>
+          );
+        })}
 
         {/* Agent rows — positioned by rowIndex, not array index */}
         {rows.map((row) => {

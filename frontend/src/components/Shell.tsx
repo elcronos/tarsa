@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Session, Agent, Event, ToolCall } from "../types";
 import { formatDuration } from "../utils/format";
 import { useNow } from "../hooks/useNow";
+import { projectName, projectColor } from "../utils/project";
 import DetailPanel from "./DetailPanel";
 
 interface ShellProps {
@@ -16,6 +17,8 @@ interface ShellProps {
   toolCalls: Map<string, ToolCall[]>;
   /** All agents grouped by session_id — used for idle/active label */
   agentsBySession?: Map<string, Agent[]>;
+  /** Active project filter — only sessions in this project are shown */
+  projectFilter?: string | null;
   children: ReactNode;
 }
 
@@ -107,6 +110,94 @@ function SessionItem({
   );
 }
 
+// ── Project group header ──────────────────────────────────────────────────────
+
+const COLLAPSED_KEY = "claudelens.project-collapsed";
+
+function loadCollapsed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as string[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsed(s: Set<string>) {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify(Array.from(s)));
+  } catch {
+    // ignore
+  }
+}
+
+function ProjectGroup({
+  name,
+  sessions,
+  selectedSessionId,
+  onSelectSession,
+  onDismissSession,
+  agentsBySession,
+  now,
+}: {
+  name: string;
+  sessions: Session[];
+  selectedSessionId: string | null;
+  onSelectSession: (id: string) => void;
+  onDismissSession: (id: string) => void;
+  agentsBySession?: Map<string, Agent[]>;
+  now: number;
+}) {
+  const color = projectColor(name);
+  const [collapsed, setCollapsed] = useState(() => loadCollapsed().has(name));
+
+  const toggleCollapse = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      const set = loadCollapsed();
+      if (next) set.add(name);
+      else set.delete(name);
+      saveCollapsed(set);
+      return next;
+    });
+  };
+
+  return (
+    <div className="mt-1">
+      <button
+        onClick={toggleCollapse}
+        className="w-full flex items-center gap-1 px-2 py-1 text-[10px] font-mono hover:bg-[var(--surface-raised)] rounded transition-colors"
+        style={{ color }}
+      >
+        <span className="shrink-0">{collapsed ? "▶" : "▼"}</span>
+        <span className="truncate flex-1 text-left">{name}</span>
+        <span className="shrink-0 text-[var(--fg-subtle)]">{sessions.length}</span>
+      </button>
+      {!collapsed && (
+        <div className="space-y-0.5">
+          {sessions.map((s) => (
+            <SessionItem
+              key={s.id}
+              session={s}
+              isSelected={s.id === selectedSessionId}
+              onClick={() => onSelectSession(s.id)}
+              onDismiss={(e) => {
+                e.stopPropagation();
+                onDismissSession(s.id);
+              }}
+              agents={agentsBySession?.get(s.id) ?? []}
+              now={now}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Shell ─────────────────────────────────────────────────────────────────────
+
 export default function Shell({
   sessions,
   selectedSessionId,
@@ -117,6 +208,7 @@ export default function Shell({
   events,
   toolCalls,
   agentsBySession,
+  projectFilter,
   children,
 }: ShellProps) {
   const now = useNow(5_000);
@@ -141,6 +233,26 @@ export default function Shell({
   const liveSessions = allSorted.filter(isLive);
   const staleSessions = allSorted.filter((s) => !isLive(s));
   const sortedSessions = showStale ? allSorted : liveSessions;
+
+  // Apply project filter
+  const filteredSessions = projectFilter
+    ? sortedSessions.filter((s) => projectName(s.cwd) === projectFilter)
+    : sortedSessions;
+
+  // Group sessions by project name
+  const projectGroups = new Map<string, Session[]>();
+  for (const s of filteredSessions) {
+    const name = projectName(s.cwd);
+    const arr = projectGroups.get(name) ?? [];
+    arr.push(s);
+    projectGroups.set(name, arr);
+  }
+  // Sort group names: Unknown last, rest alphabetically
+  const groupNames = Array.from(projectGroups.keys()).sort((a, b) => {
+    if (a === "Unknown") return 1;
+    if (b === "Unknown") return -1;
+    return a.localeCompare(b);
+  });
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -178,22 +290,20 @@ export default function Shell({
             </div>
           </button>
 
-          {sortedSessions.length === 0 ? (
+          {filteredSessions.length === 0 ? (
             <div className="px-3 py-4 text-[10px] text-[var(--fg-subtle)] font-mono">
               No sessions yet
             </div>
           ) : (
-            sortedSessions.map((s) => (
-              <SessionItem
-                key={s.id}
-                session={s}
-                isSelected={s.id === selectedSessionId}
-                onClick={() => onSelectSession(s.id)}
-                onDismiss={(e) => {
-                  e.stopPropagation();
-                  onDismissSession(s.id);
-                }}
-                agents={agentsBySession?.get(s.id) ?? []}
+            groupNames.map((name) => (
+              <ProjectGroup
+                key={name}
+                name={name}
+                sessions={projectGroups.get(name)!}
+                selectedSessionId={selectedSessionId}
+                onSelectSession={onSelectSession}
+                onDismissSession={onDismissSession}
+                agentsBySession={agentsBySession}
                 now={now}
               />
             ))

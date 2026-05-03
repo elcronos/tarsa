@@ -96,6 +96,28 @@ export interface Session {
   status: "active" | "complete";
   name: string | null;
   cwd?: string;
+  budget_usd?: number;
+  kill_on_exceed?: boolean;
+}
+
+/**
+ * A ralph/ultrawork iteration detected from event markers.
+ * Marker sources (highest confidence first):
+ *   "regex"  → 0.95 (UserPromptSubmit prompt matches `[RALPH ... ITERATION N/M]`)
+ *   "env"    → 0.85 (event.ralph_active === "1" injected by CLI from $RALPH_ACTIVE)
+ *   "repeat" → 0.75 (repeated identical UserPromptSubmit prompts within 5 minutes)
+ */
+export type IterationMarkerSource = "regex" | "env" | "repeat";
+
+export interface Iteration {
+  /** 1-indexed iteration number within the session */
+  n: number;
+  started_at: number;
+  ended_at: number | null;
+  tool_count: number;
+  cost_usd?: number;
+  confidence: number;
+  marker_source: IterationMarkerSource;
 }
 
 /**
@@ -114,4 +136,6 @@ export interface State {
    * migration. Keyed by `${sessionId}:${subagent_type}`.
    */
   pending_subagents: Map<string, string[]>;
+  /** Detected ralph/ultrawork iterations keyed by session_id */
+  iterations: Map<string, Iteration[]>;
 }

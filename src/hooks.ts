@@ -12,8 +12,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const MARKER = "claudelens.jsonl";
-export const JSONL_PATH = "/tmp/claudelens.jsonl";
+// Substring uniquely identifying a ClaudeLens hook command. Must match the
+// command produced by makeHookCommand below; agentpeek and other tools must
+// not produce a command containing this exact substring.
+export const MARKER = "claudelens --append-event";
+export const JSONL_PATH = path.join(os.homedir(), ".claudelens", "events.jsonl");
 export const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 
 export const HOOK_EVENTS = [
@@ -22,6 +25,7 @@ export const HOOK_EVENTS = [
   "SubagentStart",
   "SubagentStop",
   "Stop",
+  "UserPromptSubmit",
 ] as const;
 
 type HookEvent = (typeof HOOK_EVENTS)[number];
@@ -87,6 +91,7 @@ function blockContainsMarker(block: HookBlock, marker: string): boolean {
  * Never modifies entries that contain "agentpeek.jsonl".
  * Returns true if any changes were written.
  */
+// Note: TOCTOU on settings.json — single-user CLI tool, low practical risk.
 export function installHooks(): boolean {
   const settings = readSettings();
   if (!settings.hooks) {
@@ -150,6 +155,34 @@ export function uninstallHooks(): boolean {
     writeSettings(settings);
   }
   return changed;
+}
+
+/**
+ * Additively patch the user's settings.json with any HOOK_EVENTS missing a
+ * ClaudeLens entry. Identical to installHooks() — kept as an explicit name
+ * for the --upgrade-hooks CLI path so users understand it modifies an
+ * existing install rather than performing a fresh install.
+ *
+ * Returns the list of event names that were added (empty when nothing
+ * changed). Never duplicates entries; never removes existing user entries.
+ */
+export function upgradeHooks(): string[] {
+  const settings = readSettings();
+  if (!settings.hooks) settings.hooks = {};
+  const added: string[] = [];
+
+  for (const event of HOOK_EVENTS) {
+    const eventHooks: HookBlock[] = settings.hooks[event] ?? [];
+    settings.hooks[event] = eventHooks;
+    const alreadyInstalled = eventHooks.some((b) => blockContainsMarker(b, MARKER));
+    if (!alreadyInstalled) {
+      eventHooks.push(makeHookBlock(event));
+      added.push(event);
+    }
+  }
+
+  if (added.length > 0) writeSettings(settings);
+  return added;
 }
 
 /**

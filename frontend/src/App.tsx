@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useAgentState } from "./hooks/useAgentState";
 import { useTimeTravel } from "./hooks/useTimeTravel";
 import { useSearch } from "./hooks/useSearch";
-import TopBar from "./components/TopBar";
+import TopBar, { loadProjectFilter } from "./components/TopBar";
 import Shell from "./components/Shell";
+import { projectName } from "./utils/project";
 import ErrorBoundary from "./components/ErrorBoundary";
 import TopologyView from "./components/TopologyView";
 import TimelineView from "./components/TimelineView";
@@ -14,6 +15,8 @@ import SessionDiffView from "./components/SessionDiffView";
 import SearchPalette from "./components/SearchPalette";
 import GlobalView from "./components/GlobalView";
 import SessionHistory from "./components/SessionHistory";
+import TeamView from "./components/TeamView";
+import { isTeamWorker } from "./utils/team";
 import { loadDismissed, addDismissed, removeDismissed } from "./utils/session_storage";
 import type { Session, AgentStatus } from "./types";
 import { ALL_STATUSES, type StatusFilterSet } from "./components/StatusFilter";
@@ -27,6 +30,7 @@ export default function App() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => loadDismissed());
   const [statusFilter, setStatusFilter] = useState<StatusFilterSet>(() => ALL_STATUSES);
+  const [projectFilter, setProjectFilter] = useState<string | null>(() => loadProjectFilter());
 
   const handleStatusFilterChange = useCallback((next: StatusFilterSet) => {
     setStatusFilter(next);
@@ -34,8 +38,16 @@ export default function App() {
 
   // Always subscribe to full unfiltered state so Global view can show all
   // sessions. Per-view filtering happens client-side via `displayState`.
-  const { state, events, status, reconnect, lastError, reconnectAttempts } =
-    useAgentState(undefined);
+  const {
+    state,
+    events,
+    status,
+    reconnect,
+    lastError,
+    reconnectAttempts,
+    budgetExceeded,
+    dismissBudgetExceeded,
+  } = useAgentState(undefined);
 
   const { scrubT, isScrubbing, setScrubT, clearScrub, traveledState } =
     useTimeTravel(events);
@@ -44,6 +56,37 @@ export default function App() {
 
   // The state to render (time-traveled or live)
   const baseState = isScrubbing && traveledState ? traveledState : state;
+
+  // Project-filtered base state for GlobalView
+  const projectFilteredBaseState = projectFilter
+    ? (() => {
+        const filteredSessionIds = new Set(
+          Array.from(baseState.sessions.values())
+            .filter((s) => projectName(s.cwd) === projectFilter)
+            .map((s) => s.id)
+        );
+        return {
+          ...baseState,
+          sessions: new Map(
+            Array.from(baseState.sessions.entries()).filter(([, s]) =>
+              filteredSessionIds.has(s.id)
+            )
+          ),
+          agents: new Map(
+            Array.from(baseState.agents.entries()).filter(([, a]) =>
+              filteredSessionIds.has(a.session_id)
+            )
+          ),
+          tool_calls: new Map(
+            Array.from(baseState.tool_calls.entries()).filter(([id]) => {
+              const a = baseState.agents.get(id);
+              return a ? filteredSessionIds.has(a.session_id) : false;
+            })
+          ),
+          events: baseState.events.filter((e) => filteredSessionIds.has(e.session_id)),
+        };
+      })()
+    : baseState;
   const displayState = selectedSessionId
     ? {
         ...baseState,
@@ -69,6 +112,15 @@ export default function App() {
   const allSessions = Array.from(state.sessions.values()) as Session[];
   // Sessions shown in sidebar (exclude dismissed)
   const visibleSessions = allSessions.filter((s) => !dismissedIds.has(s.id));
+
+  // Unique sorted project names derived from visible sessions
+  const projectNames = Array.from(
+    new Set(visibleSessions.map((s) => projectName(s.cwd)))
+  ).sort((a, b) => {
+    if (a === "Unknown") return 1;
+    if (b === "Unknown") return -1;
+    return a.localeCompare(b);
+  });
 
   // Agents grouped by session_id — used for idle/active label in Shell sidebar
   const agentsBySession = new Map<string, import("./types").Agent[]>();
@@ -99,6 +151,9 @@ export default function App() {
       setSelectedSessionId(pick.id);
     }
   }, [selectedSessionId, visibleSessions]);
+
+  // Team tab visibility: show iff at least one team worker exists in displayState
+  const showTeamTab = Array.from(displayState.agents.values()).some(isTeamWorker);
 
   // Look up in displayState first (filtered view); fall back to baseState
   // so DetailPanel works when an agent is selected from a different session
@@ -180,7 +235,30 @@ export default function App() {
         onHistoryOpen={() => setHistoryOpen((v) => !v)}
         lastError={lastError}
         reconnectAttempts={reconnectAttempts}
+        projectNames={projectNames}
+        projectFilter={projectFilter}
+        onProjectFilterChange={setProjectFilter}
+        showTeamTab={showTeamTab}
       />
+
+      {/* Budget exceeded banner */}
+      {budgetExceeded && (
+        <div className="flex items-center justify-between px-3 py-2 bg-red-500/15 border-b border-red-500/40 text-xs font-mono text-red-300">
+          <span>
+            ⚠ Budget exceeded for{" "}
+            {state.sessions.get(budgetExceeded.session_id)?.name ??
+              budgetExceeded.session_id}
+            : ${budgetExceeded.current.toFixed(4)} of ${budgetExceeded.budget.toFixed(2)}
+            {budgetExceeded.kill ? " (kill flag set)" : ""}
+          </span>
+          <button
+            onClick={dismissBudgetExceeded}
+            className="ml-2 px-2 py-0.5 rounded border border-red-400/40 text-red-300 hover:bg-red-500/20"
+          >
+            dismiss
+          </button>
+        </div>
+      )}
 
       {/* Session history popover */}
       {historyOpen && (
@@ -202,6 +280,7 @@ export default function App() {
         events={displayEvents}
         toolCalls={displayState.tool_calls}
         agentsBySession={agentsBySession}
+        projectFilter={projectFilter}
       >
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-hidden">
@@ -241,9 +320,16 @@ export default function App() {
             {activeView === "compare" && (
               <SessionDiffView />
             )}
+            {activeView === "team" && showTeamTab && selectedSessionId && (
+              <TeamView
+                state={displayState}
+                selectedAgentId={selectedAgentId}
+                onSelectAgent={handleSelectAgent}
+              />
+            )}
             {activeView === "global" && (
               <GlobalView
-                state={baseState}
+                state={projectFilteredBaseState}
                 onSelectAgent={handleSelectAgent}
                 statusFilter={statusFilter}
                 onStatusFilterChange={handleStatusFilterChange}

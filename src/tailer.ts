@@ -14,7 +14,8 @@
 import fs from "node:fs";
 import readline from "node:readline";
 
-export const JSONL_PATH = "/tmp/claudelens.jsonl";
+import os from "node:os";
+export const JSONL_PATH = `${os.homedir()}/.claudelens/events.jsonl`;
 
 const ACTIVE_POLL_MS = 100;
 const IDLE_POLL_MS = 1000;

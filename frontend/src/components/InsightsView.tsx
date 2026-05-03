@@ -1,8 +1,36 @@
-import { useState, useMemo, useEffect } from "react";
-import type { State, Agent, BaselineRow, CostSource } from "../types";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import type { State, Agent, BaselineRow, CostSource, Iteration } from "../types";
 import { formatDuration, formatCost } from "../utils/format";
 import StuckBadge from "./StuckBadge";
 import EmptyState from "./EmptyState";
+import { getCsrfToken } from "../hooks/useAgentState";
+
+const BUDGET_LS_PREFIX = "claudelens.budget.";
+
+function loadBudgetLS(sessionId: string): { budget_usd: number; kill_on_exceed: boolean } | null {
+  try {
+    const raw = localStorage.getItem(BUDGET_LS_PREFIX + sessionId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { budget_usd?: number; kill_on_exceed?: boolean };
+    return {
+      budget_usd: typeof parsed.budget_usd === "number" ? parsed.budget_usd : 0,
+      kill_on_exceed: parsed.kill_on_exceed === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveBudgetLS(sessionId: string, budget_usd: number, kill_on_exceed: boolean) {
+  try {
+    localStorage.setItem(
+      BUDGET_LS_PREFIX + sessionId,
+      JSON.stringify({ budget_usd, kill_on_exceed })
+    );
+  } catch {
+    // ignore
+  }
+}
 
 interface InsightsViewProps {
   state: State;
@@ -463,6 +491,215 @@ function AgentTypeProfilesCard({ profiles }: { profiles: AgentTypeProfile[] }) {
   );
 }
 
+// ── Budget card ──────────────────────────────────────────────────────────────
+
+function BudgetCard({
+  sessionId,
+  initialBudget,
+  initialKill,
+}: {
+  sessionId: string | undefined;
+  initialBudget: number;
+  initialKill: boolean;
+}) {
+  const [budget, setBudget] = useState<number>(initialBudget);
+  const [kill, setKill] = useState<boolean>(initialKill);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    setBudget(initialBudget);
+    setKill(initialKill);
+  }, [initialBudget, initialKill, sessionId]);
+
+  const handleSave = useCallback(async () => {
+    if (!sessionId) {
+      setStatus("no session selected");
+      return;
+    }
+    saveBudgetLS(sessionId, budget, kill);
+    const token = getCsrfToken();
+    if (!token) {
+      setStatus("saved locally (no CSRF token yet)");
+      return;
+    }
+    try {
+      const res = await fetch("/api/budget", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Claudelens-CSRF": token,
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          usd: budget,
+          kill_on_exceed: kill,
+        }),
+      });
+      if (res.ok) {
+        setStatus("saved");
+      } else {
+        setStatus(`save failed (${res.status})`);
+      }
+    } catch (e) {
+      setStatus(`save failed: ${String(e)}`);
+    }
+  }, [sessionId, budget, kill]);
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-[10px] font-mono text-[var(--fg-muted)]">
+        Session budget ($)
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          value={budget}
+          onChange={(e) => setBudget(parseFloat(e.target.value) || 0)}
+          className="ml-2 w-24 px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] text-[10px] font-mono"
+        />
+      </label>
+      <label className="flex items-center gap-2 text-[10px] font-mono text-[var(--fg-muted)]">
+        <input
+          type="checkbox"
+          checked={kill}
+          onChange={(e) => setKill(e.target.checked)}
+        />
+        Stop on exceed (alert only)
+      </label>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleSave}
+          className="px-2 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-raised)] text-[10px] font-mono text-[var(--fg)] hover:bg-[var(--accent)]/10"
+        >
+          Save
+        </button>
+        {status && (
+          <span className="text-[9px] font-mono text-[var(--fg-subtle)]">{status}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Iteration spark-line ─────────────────────────────────────────────────────
+
+function IterationSparkline({
+  iterations,
+  budget,
+  cumulativeAtIter,
+}: {
+  iterations: Iteration[];
+  budget: number;
+  cumulativeAtIter: number[];
+}) {
+  if (iterations.length === 0 || cumulativeAtIter.length === 0) {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)]">
+        No iterations detected
+      </div>
+    );
+  }
+
+  const W = 280;
+  const H = 60;
+  const PAD = 4;
+  const maxY = Math.max(budget * 1.25, ...cumulativeAtIter, 0.000001);
+  const stepX = cumulativeAtIter.length > 1 ? (W - 2 * PAD) / (cumulativeAtIter.length - 1) : 0;
+
+  const points = cumulativeAtIter
+    .map((v, i) => `${PAD + i * stepX},${H - PAD - (v / maxY) * (H - 2 * PAD)}`)
+    .join(" ");
+
+  const finalCost = cumulativeAtIter[cumulativeAtIter.length - 1] ?? 0;
+  const ratio = budget > 0 ? finalCost / budget : 0;
+  const lineColor = ratio > 1 ? "#ef4444" : ratio > 0.75 ? "#f59e0b" : "#10b981";
+  const thresholdY = budget > 0 ? H - PAD - (budget / maxY) * (H - 2 * PAD) : -1;
+
+  return (
+    <div>
+      <svg width={W} height={H} className="overflow-visible">
+        {budget > 0 && thresholdY >= 0 && (
+          <line
+            x1={PAD}
+            y1={thresholdY}
+            x2={W - PAD}
+            y2={thresholdY}
+            stroke="#ef4444"
+            strokeWidth={1}
+            strokeDasharray="3 2"
+          />
+        )}
+        <polyline
+          points={points}
+          fill="none"
+          stroke={lineColor}
+          strokeWidth={1.5}
+        />
+      </svg>
+      <div className="text-[9px] font-mono text-[var(--fg-subtle)] mt-1">
+        cum: {formatCost(finalCost)} / budget: {formatCost(budget)} ({iterations.length} iter)
+      </div>
+    </div>
+  );
+}
+
+// ── Ralph iterations summary card ────────────────────────────────────────────
+
+function RalphIterationsCard({ state }: { state: State }) {
+  const entries = useMemo(() => {
+    const out: Array<{ sessionId: string; iters: Iteration[] }> = [];
+    for (const [sid, iters] of state.iterations.entries()) {
+      if (iters.length === 0) continue;
+      const sorted = [...iters].sort((a, b) => a.n - b.n);
+      out.push({ sessionId: sid, iters: sorted });
+    }
+    return out;
+  }, [state.iterations]);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      {entries.map(({ sessionId, iters }) => {
+        const session = state.sessions.get(sessionId);
+        const sessName = session?.name ?? sessionId.slice(0, 8);
+        return (
+          <div key={sessionId}>
+            <div className="text-[10px] font-mono text-[var(--fg-muted)] mb-1">
+              Session: {sessName}
+            </div>
+            <table className="w-full text-[10px] font-mono">
+              <thead>
+                <tr className="border-b border-[var(--border)] text-[var(--fg-subtle)]">
+                  <th className="pb-1 text-left">iter</th>
+                  <th className="pb-1 text-right">tools</th>
+                  <th className="pb-1 text-right">duration</th>
+                  <th className="pb-1 text-right">conf</th>
+                </tr>
+              </thead>
+              <tbody>
+                {iters.map((it) => {
+                  const dur = (it.ended_at ?? Date.now()) - it.started_at;
+                  return (
+                    <tr key={it.n} className="border-b border-[var(--border)]/50">
+                      <td className="py-0.5 text-[var(--fg-muted)]">#{it.n}</td>
+                      <td className="py-0.5 text-right text-[var(--fg-subtle)]">{it.tool_count}</td>
+                      <td className="py-0.5 text-right text-[var(--fg-subtle)]">{formatDuration(dur)}</td>
+                      <td className="py-0.5 text-right text-[var(--fg-subtle)]">
+                        {Math.round(it.confidence * 100)}%
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function InsightsView({ state }: InsightsViewProps) {
@@ -552,12 +789,95 @@ export default function InsightsView({ state }: InsightsViewProps) {
   const errorRecoveryEntries = serverInsights?.errorRecovery ?? [];
   const agentTypeProfiles = serverInsights?.agentTypeProfiles ?? [];
 
+  // Selected session for budget card + iteration sparkline
+  const selectedSessionId = useMemo(() => {
+    return Array.from(state.sessions.keys())[0];
+  }, [state.sessions]);
+  const selectedSession = selectedSessionId ? state.sessions.get(selectedSessionId) : undefined;
+
+  // Initial budget — server value if present, else localStorage fallback, else 0
+  const lsBudget = selectedSessionId ? loadBudgetLS(selectedSessionId) : null;
+  const initialBudget =
+    selectedSession?.budget_usd ?? lsBudget?.budget_usd ?? 0;
+  const initialKill =
+    selectedSession?.kill_on_exceed ?? lsBudget?.kill_on_exceed ?? false;
+
+  // Cumulative cost per iteration boundary for selected session
+  const { iterations, cumulativeAtIter } = useMemo(() => {
+    const iters = selectedSessionId
+      ? [...(state.iterations.get(selectedSessionId) ?? [])].sort((a, b) => a.n - b.n)
+      : [];
+    if (!selectedSessionId || iters.length === 0) {
+      return { iterations: iters, cumulativeAtIter: [] };
+    }
+    // Build per-event cost approximation: input_tokens * 3/1M + output_tokens * 15/1M
+    const sessAgentIds = new Set(
+      Array.from(state.agents.values())
+        .filter((a) => a.session_id === selectedSessionId)
+        .map((a) => a.id)
+    );
+    let cum = 0;
+    const out: number[] = [];
+    let evIdx = 0;
+    const sessEvents = state.events
+      .filter(
+        (e) =>
+          e.session_id === selectedSessionId &&
+          (e.agent_id == null || sessAgentIds.has(e.agent_id))
+      )
+      .sort((a, b) => a.ts - b.ts);
+    for (const it of iters) {
+      const cutoff = it.ended_at ?? Date.now();
+      while (evIdx < sessEvents.length && sessEvents[evIdx]!.ts <= cutoff) {
+        const e = sessEvents[evIdx]!;
+        const it_in = typeof e["input_tokens"] === "number" ? (e["input_tokens"] as number) : 0;
+        const it_out = typeof e["output_tokens"] === "number" ? (e["output_tokens"] as number) : 0;
+        cum += (it_in / 1_000_000) * 3 + (it_out / 1_000_000) * 15;
+        evIdx++;
+      }
+      out.push(cum);
+    }
+    return { iterations: iters, cumulativeAtIter: out };
+  }, [selectedSessionId, state]);
+
   if (agents.length === 0) {
     return <EmptyState message="No insights yet — needs at least one completed session" />;
   }
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
+      {/* Budget card */}
+      <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+        <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-3">
+          Budget
+        </div>
+        <BudgetCard
+          sessionId={selectedSessionId}
+          initialBudget={initialBudget}
+          initialKill={initialKill}
+        />
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <div className="text-[9px] font-mono text-[var(--fg-subtle)] mb-1">
+            Cumulative cost per iteration
+          </div>
+          <IterationSparkline
+            iterations={iterations}
+            budget={initialBudget}
+            cumulativeAtIter={cumulativeAtIter}
+          />
+        </div>
+      </section>
+
+      {/* Ralph iterations summary (only when iterations detected) */}
+      {state.iterations.size > 0 && (
+        <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-2">
+            Ralph Iterations
+          </div>
+          <RalphIterationsCard state={state} />
+        </section>
+      )}
+
       {/* Stuck alerts */}
       {signals.length > 0 && (
         <div className="space-y-2">

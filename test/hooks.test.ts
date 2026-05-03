@@ -32,10 +32,9 @@ interface Settings {
 }
 
 function makeHookCommand(event: string): string {
-  return (
-    `jq -c -n --argjson e "$CLAUDE_HOOK_INPUT" ` +
-    `'$e + {"hook_event":"${event}","ts":now}' >> /tmp/claudelens.jsonl 2>/dev/null || true`
-  );
+  // Mirror src/hooks.ts: command must contain the MARKER substring so the
+  // installer recognizes its own entries.
+  return `claudelens --append-event ${event} 2>/dev/null || true`;
 }
 
 function makeHookBlock(event: string): HookBlock {

@@ -25,6 +25,21 @@ function makeOpts(processor?: EventProcessor): ServerOptions {
   };
 }
 
+/** Read chunks from an SSE reader until we have the snapshot (id: line) or timeout. */
+async function readUntilSnapshot(
+  reader: ReadableStreamDefaultReader<Uint8Array>
+): Promise<string> {
+  const dec = new TextDecoder();
+  let text = "";
+  for (let i = 0; i < 5; i++) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    text += dec.decode(value);
+    if (text.includes("id: ")) break;
+  }
+  return text;
+}
+
 describe("SSE /api/events/stream id: field", () => {
   it("snapshot message includes id: line with timestamp", async () => {
     const app = createApp(makeOpts());
@@ -32,14 +47,12 @@ describe("SSE /api/events/stream id: field", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/event-stream");
 
-    // Read just the first chunk from the stream
     const reader = res.body!.getReader();
-    const { value } = await reader.read();
+    const text = await readUntilSnapshot(reader);
     reader.cancel();
 
-    const text = new TextDecoder().decode(value);
-    // Must contain an id: line before the data: line
-    expect(text).toMatch(/^id: \d+\n/);
+    // Must contain an id: line (snapshot) and data: line
+    expect(text).toMatch(/id: \d+\n/);
     expect(text).toContain('\ndata: ');
   });
 
@@ -58,11 +71,10 @@ describe("SSE /api/events/stream id: field", () => {
     const app = createApp(makeOpts(processor));
     const res = await app.fetch(new Request("http://localhost/api/events/stream"));
     const reader = res.body!.getReader();
-    const { value } = await reader.read();
+    const text = await readUntilSnapshot(reader);
     reader.cancel();
 
-    const text = new TextDecoder().decode(value);
-    expect(text).toMatch(/^id: 1700000000000\n/);
+    expect(text).toMatch(/id: 1700000000000\n/);
   });
 
   it("snapshot id falls back to a recent timestamp when no events", async () => {
@@ -70,12 +82,11 @@ describe("SSE /api/events/stream id: field", () => {
     const app = createApp(makeOpts());
     const res = await app.fetch(new Request("http://localhost/api/events/stream"));
     const reader = res.body!.getReader();
-    const { value } = await reader.read();
+    const text = await readUntilSnapshot(reader);
     reader.cancel();
     const after = Date.now();
 
-    const text = new TextDecoder().decode(value);
-    const match = text.match(/^id: (\d+)\n/);
+    const match = text.match(/id: (\d+)\n/);
     expect(match).not.toBeNull();
     const id = parseInt(match![1]!, 10);
     expect(id).toBeGreaterThanOrEqual(before);

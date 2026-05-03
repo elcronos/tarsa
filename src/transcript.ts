@@ -14,6 +14,20 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+// ── Security: transcript path allowlist ───────────────────────────────────────
+// Resolved once at module load so macOS /System/Volumes/Data/ symlinks are
+// handled correctly regardless of how homedir() is spelled.
+let ALLOWED_TRANSCRIPT_PREFIX: string;
+try {
+  ALLOWED_TRANSCRIPT_PREFIX =
+    fs.realpathSync(path.join(os.homedir(), ".claude", "projects")) + path.sep;
+} catch {
+  // If the directory doesn't exist yet, fall back to the logical path.
+  // Reads will fail the startsWith guard and return [] safely.
+  ALLOWED_TRANSCRIPT_PREFIX =
+    path.join(os.homedir(), ".claude", "projects") + path.sep;
+}
+
 export type MessageType = "system" | "user" | "assistant" | "tool" | "tool_result" | "summary";
 
 export interface TranscriptMessage {
@@ -255,10 +269,18 @@ export function readAgentTokens(sessionId: string, agentId?: string): TokenUsage
 
 /** Read transcript directly from an absolute file path (used for subagent transcripts). */
 export function readTranscriptByPath(filePath: string): TranscriptMessage[] {
-  if (!filePath || filePath.includes("..")) return [];
+  if (!filePath) return [];
+  // Resolve symlinks; reject paths that escape ~/.claude/projects/
+  let real: string;
+  try {
+    real = fs.realpathSync(filePath);
+  } catch {
+    return [];
+  }
+  if (!real.startsWith(ALLOWED_TRANSCRIPT_PREFIX)) return [];
   let raw: string;
   try {
-    raw = fs.readFileSync(filePath, "utf8");
+    raw = fs.readFileSync(real, "utf8");
   } catch {
     return [];
   }
@@ -308,6 +330,29 @@ export function lastAssistantMessage(filePath: string): string | null {
     }
   }
   return last;
+}
+
+/**
+ * Derive the original cwd from a transcript file path.
+ * Claude stores transcripts under ~/.claude/projects/<encoded-cwd>/<session>.jsonl
+ * where <encoded-cwd> is the absolute cwd with `/` replaced by `-`.
+ *
+ * Returns null if the path is outside ~/.claude/projects/ or the encoded
+ * directory cannot be decoded.
+ */
+export function cwdFromTranscriptPath(p: string): string | null {
+  if (!p) return null;
+  const projectsDir = claudeProjectsDir();
+  // Walk up to the parent of <session>.jsonl
+  const parent = path.dirname(p);
+  if (!parent.startsWith(projectsDir)) return null;
+  const encoded = path.basename(parent);
+  if (!encoded) return null;
+  // Claude encodes `/` as `-` and prepends a leading `-` for the root slash.
+  // Decode by replacing every `-` with `/`.
+  const decoded = encoded.replace(/-/g, "/");
+  // Ensure absolute (Claude paths always start with `/`)
+  return decoded.startsWith("/") ? decoded : `/${decoded}`;
 }
 
 export async function readTranscript(sessionId: string): Promise<TranscriptMessage[]> {

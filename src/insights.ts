@@ -501,6 +501,49 @@ export function agentTypeTrends(baselines: BaselineRow[]): AgentTypeTrend[] {
   });
 }
 
+// ── Budget exceeded detection ─────────────────────────────────────────────
+
+export interface BudgetExceeded {
+  session_id: string;
+  current: number;
+  budget: number;
+  kill: boolean;
+}
+
+/**
+ * For each session with a budget set, compute its cumulative cost; if
+ * cost > budget, emit a BudgetExceeded record. Caller is responsible for
+ * deduping (only emit on the first crossing).
+ */
+export function detectBudgetExceeded(state: State): BudgetExceeded[] {
+  const out: BudgetExceeded[] = [];
+  if (state.sessions.size === 0) return out;
+
+  // Compute per-session cost from per-agent cost
+  const cost = costEstimate(state);
+  const costPerSession = new Map<string, number>();
+  for (const a of cost.perAgent) {
+    const agent = state.agents.get(a.agentId);
+    if (!agent) continue;
+    const sid = agent.session_id;
+    costPerSession.set(sid, (costPerSession.get(sid) ?? 0) + a.usd);
+  }
+
+  for (const [sid, session] of state.sessions) {
+    if (typeof session.budget_usd !== "number" || session.budget_usd <= 0) continue;
+    const current = costPerSession.get(sid) ?? 0;
+    if (current > session.budget_usd) {
+      out.push({
+        session_id: sid,
+        current: Math.round(current * 1_000_000) / 1_000_000,
+        budget: session.budget_usd,
+        kill: session.kill_on_exceed === true,
+      });
+    }
+  }
+  return out;
+}
+
 // ── Z-score badge ─────────────────────────────────────────────────────────
 
 export type ZScoreBadge = "fast" | "normal" | "slow";

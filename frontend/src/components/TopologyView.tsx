@@ -1,6 +1,8 @@
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import EmptyState from "./EmptyState";
 import { isTeamWorker } from "../utils/team";
+import { useNow } from "../hooks/useNow";
+import { formatDuration } from "../utils/format";
 import ReactFlow, {
   Background,
   Controls,
@@ -164,6 +166,33 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
+  // Live tooltip for active nodes
+  const now = useNow(1000);
+  const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
+
+  const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
+    setHoveredAgentId(node.id);
+  }, []);
+
+  const onNodeMouseLeave = useCallback(() => {
+    setHoveredAgentId(null);
+  }, []);
+
+  // Compute tooltip content for the hovered node
+  const tooltipContent = useMemo(() => {
+    if (!hoveredAgentId) return null;
+    const agent = state.agents.get(hoveredAgentId);
+    if (!agent || agent.status !== "active") return null;
+    // Find most-recent open ToolCall (no ended_at)
+    const agentToolCalls = state.tool_calls.get(hoveredAgentId) ?? [];
+    const openCall = agentToolCalls
+      .filter((tc) => tc.ended_ms === null)
+      .sort((a, b) => b.started_ms - a.started_ms)[0];
+    if (!openCall) return null;
+    const elapsed = formatDuration(now - openCall.started_ms);
+    return `${openCall.tool_name} · running for ${elapsed}`;
+  }, [hoveredAgentId, state.agents, state.tool_calls, now]);
+
   // Counts from full (pre-filter) agent list for the StatusFilter chips
   const statusCounts = useMemo(() => {
     const counts: Partial<Record<AgentStatus, number>> = {};
@@ -283,6 +312,8 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
       onEdgesChange={onEdgesChange}
       onNodeClick={onNodeClick}
       onPaneClick={onPaneClick}
+      onNodeMouseEnter={onNodeMouseEnter}
+      onNodeMouseLeave={onNodeMouseLeave}
       fitViewOptions={{ padding: 0.15 }}
       minZoom={0.3}
       maxZoom={2}
@@ -301,6 +332,14 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
         }}
         maskColor="rgba(9,9,11,0.7)"
       />
+      {/* Live tooltip for active node hover */}
+      {tooltipContent && (
+        <Panel position="top-left" className="!m-2 pointer-events-none">
+          <div className="rounded border border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur px-2.5 py-1.5 text-[11px] font-mono text-emerald-400 shadow-lg">
+            {tooltipContent}
+          </div>
+        </Panel>
+      )}
       <Panel position="bottom-left" className="!m-2">
         <div className="rounded border border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur px-2 py-1.5 text-[10px] font-mono text-[var(--fg-subtle)] flex items-center gap-3">
           <span className="flex items-center gap-1">

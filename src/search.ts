@@ -131,10 +131,13 @@ export function searchEvents(query: string, limit = 50): SearchResult[] {
       }
     }
 
-    // Prefix match for partial queries
+    // Prefix match for partial queries (capped at 256 candidate keys per term)
     if (term.length >= 3) {
+      let prefixCount = 0;
       for (const [indexedToken, idSet] of invertedIndex) {
+        if (prefixCount >= 256) break;
         if (indexedToken !== term && indexedToken.startsWith(term)) {
+          prefixCount++;
           for (const id of idSet) {
             const freq = termFreq.get(id)?.get(indexedToken) ?? 0;
             const event = eventStore.get(id);

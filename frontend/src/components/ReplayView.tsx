@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, useLayoutEffect } from "react";
 import type { Event, ToolCall, State, AgentStatus } from "../types";
 import { formatTime, formatDuration } from "../utils/format";
 import IOPair from "./IOPair";
@@ -205,6 +205,36 @@ export default function ReplayView({
   const selectedId = selectedEventId !== undefined ? selectedEventId : internalSelected;
   const selectedRef = useRef<HTMLDivElement | null>(null);
 
+  // ── Follow mode ─────────────────────────────────────────────────────────────
+  const FOLLOW_KEY = "claudelens.replay-follow";
+  const [follow, setFollow] = useState<boolean>(() => {
+    try { return localStorage.getItem(FOLLOW_KEY) === "true"; } catch { return false; }
+  });
+  const listRef = useRef<HTMLDivElement | null>(null);
+  // Track whether user is scrolling up (to auto-pause follow)
+  const lastScrollTop = useRef<number>(0);
+
+  const toggleFollow = useCallback(() => {
+    setFollow((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(FOLLOW_KEY, String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  // Detect scroll-up → disable follow
+  const handleListScroll = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const st = el.scrollTop;
+    if (st < lastScrollTop.current) {
+      // Scrolled up — pause follow
+      setFollow(false);
+      try { localStorage.setItem(FOLLOW_KEY, "false"); } catch { /* ignore */ }
+    }
+    lastScrollTop.current = st;
+  }, []);
+
   // Auto-expand + scroll to the most recent event on mount and on data updates
   useEffect(() => {
     if (events.length === 0) return;
@@ -259,6 +289,15 @@ export default function ReplayView({
       return true;
     });
   }, [events, filters, statusFilter, state]);
+
+  // Auto-scroll to bottom when follow is ON and filtered list changes
+  useLayoutEffect(() => {
+    if (!follow) return;
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    lastScrollTop.current = el.scrollTop;
+  }, [follow, filtered.length]);
 
   const handleSelect = useCallback(
     (id: string, agentId?: string) => {
@@ -367,6 +406,17 @@ export default function ReplayView({
           >
             {showAllIO ? "Hide all I/O" : "Show all I/O"}
           </button>
+          <button
+            onClick={toggleFollow}
+            className={`text-[10px] font-mono px-1.5 py-0.5 rounded border transition-colors ${
+              follow
+                ? "border-emerald-500/50 text-emerald-400 bg-emerald-500/10"
+                : "border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg)]"
+            }`}
+            title={follow ? "Following — click to pause" : "Follow new events"}
+          >
+            {follow ? "⏸ Following" : "▶ Follow"}
+          </button>
           <span className="text-[10px] font-mono text-[var(--fg-subtle)]">
             {filtered.length}/{events.length}
           </span>
@@ -374,7 +424,11 @@ export default function ReplayView({
       </div>
 
       {/* Event list */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto"
+        onScroll={handleListScroll}
+      >
         {filtered.map((e) => (
           <EventRow
             key={e.id}
