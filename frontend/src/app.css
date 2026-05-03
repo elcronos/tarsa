@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+/* ── Design tokens — Linear/Vercel dark palette ──────────────────────── */
+:root {
+  --bg: #09090b;
+  --surface: #111113;
+  --surface-raised: #18181b;
+  --border: #27272a;
+  --border-subtle: #1c1c1f;
+  --fg: #fafafa;
+  --fg-muted: #a1a1aa;
+  --fg-subtle: #52525b;
+  --accent: #a78bfa;
+  --accent-dim: #7c3aed;
+  --blue: #3b82f6;
+  --green: #10b981;
+  --red: #ef4444;
+  --amber: #f59e0b;
+
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", "Fira Code", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-subtle);
+}
+
+/* ── Utility classes ─────────────────────────────────────────────────── */
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ── Stuck pulse animation ───────────────────────────────────────────── */
+@keyframes pulse-amber {
+  0%, 100% { border-color: var(--amber); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  50% { border-color: var(--amber); box-shadow: 0 0 0 4px rgba(245, 158, 11, 0); }
+}
+
+.stuck-pulse {
+  animation: pulse-amber 2s ease-in-out infinite;
+}
+
+/* ── Active pulse animation ──────────────────────────────────────────── */
+@keyframes pulse-active {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.5); opacity: 0.5; }
+  50% { box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15); opacity: 1; }
+}
+
+.active-pulse {
+  animation: pulse-active 2s ease-in-out infinite;
+}
+
+/* ── React Flow overrides ────────────────────────────────────────────── */
+.react-flow__background {
+  background-color: var(--bg);
+}
+.react-flow__controls button {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  color: var(--fg-muted);
+}
+.react-flow__controls button:hover {
+  background: var(--border);
+}
+.react-flow__minimap {
+  background: var(--surface);
+}

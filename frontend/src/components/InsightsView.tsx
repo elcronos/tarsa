@@ -1,0 +1,669 @@
+import { useState, useMemo, useEffect } from "react";
+import type { State, Agent, BaselineRow, CostSource } from "../types";
+import { formatDuration, formatCost } from "../utils/format";
+import StuckBadge from "./StuckBadge";
+import EmptyState from "./EmptyState";
+
+interface InsightsViewProps {
+  state: State;
+}
+
+// ── Types mirroring server insights.ts ───────────────────────────────────────
+
+interface StuckSignal {
+  agentId: string;
+  agentName: string;
+  reason: "repeated_tool" | "consecutive_failures";
+  detail: string;
+  tool_name?: string;
+  count: number;
+}
+
+interface ErrorRecoveryEntry {
+  agentId: string;
+  agentName: string;
+  tool_name: string;
+  failed_tool_id: string;
+  recovery: "retried_succeeded" | "retried_failed" | "no_retry";
+  retry_tool_id: string | null;
+}
+
+interface AgentPerfRow {
+  id: string;
+  name: string;
+  type: string | null;
+  duration_ms: number;
+  tool_count: number;
+  errors: number;
+  cost_usd: number;
+}
+
+interface AgentTypeProfile {
+  type: string;
+  sample_count: number;
+  avg_duration_ms: number;
+  avg_tool_count: number;
+  summary: string;
+}
+
+interface InsightsData {
+  bottleneck: {
+    longestAgentId: string | null;
+    longestAgentName: string | null;
+    longestDurationMs: number;
+    highestErrorAgentId: string | null;
+    highestErrorAgentName: string | null;
+    highestErrorCount: number;
+  };
+  costEstimate: {
+    perAgent: Array<{
+      agentId: string;
+      agentName: string;
+      inputTokens: number;
+      outputTokens: number;
+      usd: number;
+      model: string;
+      source?: CostSource;
+    }>;
+    totalUsd: number;
+    source?: CostSource;
+  };
+  parallelismGaps: Array<{
+    agents: [string, string];
+    aEndMs: number;
+    bStartMs: number;
+    overlapOpportunityMs: number;
+  }>;
+  stuckSignals: StuckSignal[];
+  errorRecovery?: ErrorRecoveryEntry[];
+  agentPerformance?: AgentPerfRow[];
+  agentTypeProfiles?: AgentTypeProfile[];
+}
+
+// ── Client-side stuck detection (mirrors server heuristic) ───────────────────
+
+const REPEAT_THRESHOLD = 3;
+const CONSECUTIVE_FAILURE_THRESHOLD = 3;
+
+function detectStuck(state: State): StuckSignal[] {
+  const signals: StuckSignal[] = [];
+
+  for (const agent of state.agents.values()) {
+    if (agent.status === "done") continue;
+    const calls = state.tool_calls.get(agent.id) ?? [];
+
+    // Repeated tool + same input
+    const buckets = new Map<string, { count: number; firstMs: number; lastMs: number }>();
+    for (const tc of calls) {
+      const key = `${tc.tool_name}|${JSON.stringify(tc.input).slice(0, 200)}`;
+      const b = buckets.get(key);
+      if (!b) buckets.set(key, { count: 1, firstMs: tc.started_ms, lastMs: tc.started_ms });
+      else { b.count++; b.lastMs = tc.started_ms; }
+    }
+    for (const [key, b] of buckets) {
+      if (b.count >= REPEAT_THRESHOLD && b.lastMs - b.firstMs <= 60_000) {
+        const [toolName] = key.split("|");
+        signals.push({
+          agentId: agent.id,
+          agentName: agent.name,
+          reason: "repeated_tool",
+          detail: `"${toolName}" called ${b.count}× with same input`,
+          tool_name: toolName,
+          count: b.count,
+        });
+      }
+    }
+
+    // Consecutive failures
+    let consecutiveErrors = 0;
+    for (let i = calls.length - 1; i >= 0; i--) {
+      if (calls[i]?.status === "error") consecutiveErrors++;
+      else break;
+    }
+    if (consecutiveErrors >= CONSECUTIVE_FAILURE_THRESHOLD) {
+      signals.push({
+        agentId: agent.id,
+        agentName: agent.name,
+        reason: "consecutive_failures",
+        detail: `${consecutiveErrors} consecutive tool failures`,
+        count: consecutiveErrors,
+      });
+    }
+  }
+
+  return signals;
+}
+
+// ── Cost stacked bar ─────────────────────────────────────────────────────────
+
+const BAR_COLORS = [
+  "#3b82f6", "#10b981", "#a78bfa", "#f97316", "#f59e0b",
+  "#ec4899", "#06b6d4", "#84cc16", "#ef4444", "#8b5cf6",
+];
+
+function costSourceLabel(source: CostSource): string {
+  if (source === "measured") return "from transcript";
+  if (source === "estimated_chars") return "estimated from chars (4 chars/token)";
+  return "estimated from tool count";
+}
+
+function CostBar({
+  perAgent,
+  totalUsd,
+  source,
+}: {
+  perAgent: Array<{ agentId: string; agentName: string; usd: number }>;
+  totalUsd: number;
+  source?: CostSource;
+}) {
+  if (totalUsd === 0) {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)]">
+        No cost data available (token counts not in events)
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {source && (
+        <div className="flex items-center gap-1.5 mb-1">
+          <span
+            className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+              source === "measured"
+                ? "bg-green-500/15 text-green-400"
+                : source === "estimated_chars"
+                  ? "bg-blue-500/15 text-blue-400"
+                  : "bg-[var(--surface-raised)] text-[var(--fg-subtle)]"
+            }`}
+          >
+            {source}
+          </span>
+          <span className="text-[9px] font-mono text-[var(--fg-subtle)]">
+            {costSourceLabel(source)}
+          </span>
+        </div>
+      )}
+      <div className="h-4 w-full flex rounded overflow-hidden">
+        {perAgent.map((a, i) => {
+          const pct = totalUsd > 0 ? (a.usd / totalUsd) * 100 : 0;
+          if (pct < 0.5) return null;
+          return (
+            <div
+              key={a.agentId}
+              style={{ width: `${pct}%`, backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
+              title={`${a.agentName}: ${formatCost(a.usd)}`}
+            />
+          );
+        })}
+      </div>
+      <div className="space-y-1">
+        {perAgent.map((a, i) => (
+          <div key={a.agentId} className="flex items-center gap-2">
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: BAR_COLORS[i % BAR_COLORS.length] }}
+            />
+            <span className="text-[10px] font-mono text-[var(--fg-muted)] flex-1 truncate">
+              {a.agentName}
+            </span>
+            <span className="text-[10px] font-mono text-[var(--fg-subtle)]">
+              {formatCost(a.usd)}
+            </span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between border-t border-[var(--border)] pt-1 mt-1">
+          <span className="text-[10px] font-mono text-[var(--fg-subtle)]">total</span>
+          <span className="text-[10px] font-mono text-[var(--fg)]">{formatCost(totalUsd)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Agent performance table ───────────────────────────────────────────────────
+
+type SortKey = "name" | "duration" | "tools" | "cost" | "errors";
+
+function zScoreBadge(
+  durationMs: number,
+  baseline: BaselineRow
+): "fast" | "normal" | "slow" | null {
+  if (baseline.sample_count < 5 || baseline.stddev_duration === 0) return null;
+  const z = (durationMs - baseline.mean_duration) / baseline.stddev_duration;
+  if (z < -1) return "fast";
+  if (z > 1) return "slow";
+  return "normal";
+}
+
+function ZBadge({ badge }: { badge: "fast" | "normal" | "slow" }) {
+  const styles: Record<string, string> = {
+    fast: "bg-green-500/15 text-green-400",
+    normal: "bg-[var(--surface-raised)] text-[var(--fg-subtle)]",
+    slow: "bg-red-500/15 text-red-400",
+  };
+  return (
+    <span className={`text-[8px] font-mono px-1 py-0.5 rounded ml-1 ${styles[badge]}`}>
+      {badge}
+    </span>
+  );
+}
+
+function AgentTable({
+  agents,
+  costMap,
+  baselinesMap,
+}: {
+  agents: Agent[];
+  costMap: Map<string, number>;
+  baselinesMap: Map<string, BaselineRow>;
+}) {
+  const [sortKey, setSortKey] = useState<SortKey>("duration");
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const sorted = useMemo(() => {
+    return [...agents].sort((a, b) => {
+      let v = 0;
+      if (sortKey === "name") v = a.name.localeCompare(b.name);
+      else if (sortKey === "duration") {
+        const da = a.last_seen_ms - a.first_seen_ms;
+        const db = b.last_seen_ms - b.first_seen_ms;
+        v = da - db;
+      } else if (sortKey === "tools") v = a.tool_count - b.tool_count;
+      else if (sortKey === "cost") v = (costMap.get(a.id) ?? 0) - (costMap.get(b.id) ?? 0);
+      else if (sortKey === "errors") v = a.error_count - b.error_count;
+      return sortAsc ? v : -v;
+    });
+  }, [agents, sortKey, sortAsc, costMap]);
+
+  const handleSort = (key: SortKey) => {
+    if (key === sortKey) setSortAsc((v) => !v);
+    else { setSortKey(key); setSortAsc(false); }
+  };
+
+  const col = (key: SortKey, label: string, align = "text-left") => (
+    <th
+      className={`pb-1 text-[10px] font-mono text-[var(--fg-subtle)] cursor-pointer hover:text-[var(--fg)] select-none ${align}`}
+      onClick={() => handleSort(key)}
+    >
+      {label}
+      {sortKey === key && <span className="ml-0.5">{sortAsc ? "↑" : "↓"}</span>}
+    </th>
+  );
+
+  if (sorted.length === 0) {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)]">No agents to display.</div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[10px] font-mono">
+        <thead>
+          <tr className="border-b border-[var(--border)]">
+            {col("name", "agent")}
+            {col("duration", "duration", "text-right")}
+            {col("tools", "tools", "text-right")}
+            {col("cost", "cost", "text-right")}
+            {col("errors", "errors", "text-right")}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((agent) => {
+            const duration = agent.last_seen_ms - agent.first_seen_ms;
+            const cost = costMap.get(agent.id) ?? 0;
+            const baseline = agent.subagent_type ? baselinesMap.get(agent.subagent_type) : undefined;
+            const badge = baseline ? zScoreBadge(duration, baseline) : null;
+            return (
+              <tr key={agent.id} className="border-b border-[var(--border)] hover:bg-[var(--surface-raised)]">
+                <td className="py-1 pr-2 text-[var(--fg-muted)] truncate max-w-[120px]">
+                  {agent.name}
+                </td>
+                <td className="py-1 text-right text-[var(--fg-subtle)]">
+                  <span>{formatDuration(duration)}</span>
+                  {badge && badge !== "normal" && <ZBadge badge={badge} />}
+                </td>
+                <td className="py-1 text-right text-[var(--fg-subtle)]">
+                  {agent.tool_count}
+                </td>
+                <td className="py-1 text-right text-[var(--fg-subtle)]">
+                  {cost > 0 ? formatCost(cost) : "–"}
+                </td>
+                <td className={`py-1 text-right ${agent.error_count > 0 ? "text-red-400" : "text-[var(--fg-subtle)]"}`}>
+                  {agent.error_count}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Agent type trends card ────────────────────────────────────────────────────
+
+// TODO: range computation here duplicates src/insights.ts::agentTypeTrends.
+// Extract to a shared package once the monorepo workspace is set up.
+function AgentTypeTrendsCard({ baselines }: { baselines: BaselineRow[] }) {
+  if (baselines.length === 0) {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)]">
+        No baseline data yet — trends appear after sessions complete.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {baselines.map((b) => {
+        const toolLow = Math.max(0, Math.round(b.mean_tool_count - b.stddev_tool_count));
+        const toolHigh = Math.round(b.mean_tool_count + b.stddev_tool_count);
+        const durLowS = Math.max(0, (b.mean_duration - b.stddev_duration) / 1000);
+        const durHighS = (b.mean_duration + b.stddev_duration) / 1000;
+        const toolRange = toolLow === toolHigh ? `${toolLow}` : `${toolLow}-${toolHigh}`;
+        const durRange =
+          Math.abs(durHighS - durLowS) < 0.05
+            ? `${durLowS.toFixed(1)}s`
+            : `${durLowS.toFixed(1)}-${durHighS.toFixed(1)}s`;
+        const summary =
+          `Usually makes ${toolRange} tool call${toolHigh !== 1 ? "s" : ""}, takes ${durRange}`;
+
+        return (
+          <div key={b.agent_type} className="rounded bg-[var(--bg)] p-2">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[10px] font-mono text-[var(--fg)] font-medium">{b.agent_type}</span>
+              <span className="text-[9px] font-mono text-[var(--fg-subtle)]">
+                {b.sample_count} run{b.sample_count !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="text-[10px] font-mono text-[var(--fg-muted)]">{summary}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Error recovery card ───────────────────────────────────────────────────────
+
+function RecoveryBadge({ recovery }: { recovery: ErrorRecoveryEntry["recovery"] }) {
+  if (recovery === "retried_succeeded") {
+    return (
+      <span className="text-[9px] font-mono px-1 rounded bg-green-500/15 text-green-400">
+        ↻ recovered
+      </span>
+    );
+  }
+  if (recovery === "retried_failed") {
+    return (
+      <span className="text-[9px] font-mono px-1 rounded bg-red-500/15 text-red-400">
+        ↻ retry failed
+      </span>
+    );
+  }
+  return (
+    <span className="text-[9px] font-mono px-1 rounded bg-[var(--surface-raised)] text-[var(--fg-subtle)]">
+      no retry
+    </span>
+  );
+}
+
+function ErrorRecoveryCard({ entries }: { entries: ErrorRecoveryEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)]">
+        No tool failures detected.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1 max-h-48 overflow-y-auto">
+      {entries.map((entry, i) => (
+        <div key={i} className="flex items-center gap-2 py-0.5">
+          <span className="text-[10px] font-mono text-[var(--fg-muted)] truncate flex-1">
+            <span className="text-[var(--fg-subtle)]">{entry.agentName}</span>
+            {" · "}
+            {entry.tool_name}
+          </span>
+          <RecoveryBadge recovery={entry.recovery} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Agent type profiles card ──────────────────────────────────────────────────
+
+function AgentTypeProfilesCard({ profiles }: { profiles: AgentTypeProfile[] }) {
+  if (profiles.length === 0) {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)]">
+        No agent type data yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {profiles.map((p) => (
+        <div key={p.type} className="rounded bg-[var(--bg)] p-2">
+          <div className="flex items-center justify-between mb-0.5">
+            <span className="text-[10px] font-mono text-[var(--fg)] font-medium">{p.type}</span>
+            <span className="text-[9px] font-mono text-[var(--fg-subtle)]">
+              {p.sample_count} sample{p.sample_count !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <div className="text-[10px] font-mono text-[var(--fg-muted)]">{p.summary}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Main component ───────────────────────────────────────────────────────────
+
+export default function InsightsView({ state }: InsightsViewProps) {
+  const [serverInsights, setServerInsights] = useState<InsightsData | null>(null);
+  const [baselines, setBaselines] = useState<BaselineRow[]>([]);
+
+  // Try to load from server, fall back to client-side computation
+  useEffect(() => {
+    const sessionId = Array.from(state.sessions.keys())[0];
+    const url = sessionId ? `/api/insights?session=${sessionId}` : "/api/insights";
+    fetch(url)
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((data: InsightsData) => setServerInsights(data))
+      .catch(() => setServerInsights(null));
+  }, [state.sessions]);
+
+  // Fetch baselines for trend cards and z-score badges
+  useEffect(() => {
+    fetch("/api/baselines")
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((data: BaselineRow[]) => setBaselines(data))
+      .catch(() => setBaselines([]));
+  }, [state.sessions]);
+
+  // Client-side derived data
+  const stuckSignals = useMemo(() => detectStuck(state), [state]);
+
+  const agents = useMemo(() => Array.from(state.agents.values()), [state.agents]);
+
+  const { costPerAgent, totalUsd, costMap, costSource } = useMemo(() => {
+    const perAgent: Array<{ agentId: string; agentName: string; usd: number }> = [];
+    const costMap = new Map<string, number>();
+    let totalUsd = 0;
+    let costSource: CostSource = "tool_count_fallback";
+
+    if (serverInsights) {
+      for (const a of serverInsights.costEstimate.perAgent) {
+        perAgent.push({ agentId: a.agentId, agentName: a.agentName, usd: a.usd });
+        costMap.set(a.agentId, a.usd);
+        totalUsd += a.usd;
+      }
+      totalUsd = serverInsights.costEstimate.totalUsd;
+      if (serverInsights.costEstimate.source) costSource = serverInsights.costEstimate.source;
+    } else {
+      // Client-side estimate from events
+      for (const agent of state.agents.values()) {
+        let input = 0, output = 0;
+        for (const e of state.events) {
+          if (e.agent_id !== agent.id) continue;
+          if (typeof e["input_tokens"] === "number") input += e["input_tokens"] as number;
+          if (typeof e["output_tokens"] === "number") output += e["output_tokens"] as number;
+        }
+        const usd = (input / 1_000_000) * 3 + (output / 1_000_000) * 15;
+        perAgent.push({ agentId: agent.id, agentName: agent.name, usd });
+        costMap.set(agent.id, usd);
+        totalUsd += usd;
+      }
+    }
+    return { costPerAgent: perAgent, totalUsd, costMap, costSource };
+  }, [serverInsights, state]);
+
+  const baselinesMap = useMemo(
+    () => new Map(baselines.map((b) => [b.agent_type, b])),
+    [baselines]
+  );
+
+  const bottleneck = useMemo(() => {
+    if (serverInsights) return serverInsights.bottleneck;
+    let longestAgent: Agent | null = null;
+    let longestDurationMs = 0;
+    for (const agent of state.agents.values()) {
+      const d = agent.last_seen_ms - agent.first_seen_ms;
+      if (d > longestDurationMs) { longestDurationMs = d; longestAgent = agent; }
+    }
+    return {
+      longestAgentId: longestAgent?.id ?? null,
+      longestAgentName: longestAgent?.name ?? null,
+      longestDurationMs,
+      highestErrorAgentId: null,
+      highestErrorAgentName: null,
+      highestErrorCount: 0,
+    };
+  }, [serverInsights, state]);
+
+  const gaps = serverInsights?.parallelismGaps ?? [];
+  const signals = serverInsights?.stuckSignals ?? stuckSignals;
+  const errorRecoveryEntries = serverInsights?.errorRecovery ?? [];
+  const agentTypeProfiles = serverInsights?.agentTypeProfiles ?? [];
+
+  if (agents.length === 0) {
+    return <EmptyState message="No insights yet — needs at least one completed session" />;
+  }
+
+  return (
+    <div className="h-full overflow-y-auto p-4 space-y-4">
+      {/* Stuck alerts */}
+      {signals.length > 0 && (
+        <div className="space-y-2">
+          {signals.map((sig, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-2 px-3 py-2 rounded border border-amber-500/30 bg-amber-500/10"
+            >
+              <StuckBadge reason={sig.detail} size="sm" />
+              <div className="min-w-0">
+                <div className="text-xs font-mono text-amber-300 font-medium">
+                  {sig.agentName}
+                </div>
+                <div className="text-[10px] font-mono text-amber-400/80 mt-0.5">
+                  {sig.detail}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Cost breakdown */}
+      <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+        <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-3">
+          Cost Breakdown
+        </div>
+        <CostBar perAgent={costPerAgent} totalUsd={totalUsd} source={costSource} />
+      </section>
+
+      {/* Bottleneck */}
+      {bottleneck.longestAgentName && (
+        <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-2">
+            Bottleneck
+          </div>
+          <div className="text-xs font-mono text-[var(--fg)]">
+            {bottleneck.longestAgentName}
+          </div>
+          <div className="text-[10px] font-mono text-[var(--fg-muted)] mt-0.5">
+            Longest agent · {formatDuration(bottleneck.longestDurationMs)}
+          </div>
+          <div className="text-[10px] font-mono text-[var(--fg-subtle)] mt-1">
+            Recommendation: consider splitting or parallelising this agent&apos;s work.
+          </div>
+        </section>
+      )}
+
+      {/* Parallelism gaps */}
+      {gaps.length > 0 && (
+        <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-2">
+            Parallelism Opportunities ({gaps.length})
+          </div>
+          <div className="space-y-1.5">
+            {gaps.slice(0, 5).map((gap, i) => {
+              const a = state.agents.get(gap.agents[0]);
+              const b = state.agents.get(gap.agents[1]);
+              return (
+                <div key={i} className="text-[10px] font-mono text-[var(--fg-muted)]">
+                  <span className="text-[var(--fg)]">{a?.name ?? gap.agents[0]}</span>
+                  {" → "}
+                  <span className="text-[var(--fg)]">{b?.name ?? gap.agents[1]}</span>
+                  <span className="text-[var(--fg-subtle)] ml-1">
+                    ({formatDuration(gap.overlapOpportunityMs)} gap)
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Error recovery */}
+      <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+        <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-2">
+          Error Recovery
+        </div>
+        <ErrorRecoveryCard entries={errorRecoveryEntries} />
+      </section>
+
+      {/* Agent type profiles (from current session) */}
+      {agentTypeProfiles.length > 0 && (
+        <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-2">
+            Agent Type Profiles
+          </div>
+          <AgentTypeProfilesCard profiles={agentTypeProfiles} />
+        </section>
+      )}
+
+      {/* Agent type trends (from historical baselines) */}
+      <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+        <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-2">
+          Agent Type Trends
+        </div>
+        <AgentTypeTrendsCard baselines={baselines} />
+      </section>
+
+      {/* Agent performance table */}
+      <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+        <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-3">
+          Agent Performance
+        </div>
+        <AgentTable agents={agents} costMap={costMap} baselinesMap={baselinesMap} />
+      </section>
+    </div>
+  );
+}

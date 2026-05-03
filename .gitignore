@@ -1,0 +1,16 @@
+node_modules/
+dist/
+src/static/
+*.log
+.DS_Store
+
+# OMC session/state files (private)
+.omc/
+
+# IDE
+.vscode/
+.idea/
+
+# Tests
+.vitest-cache/
+*.tsbuildinfo
