@@ -153,22 +153,30 @@ function MiniDagNode({
   node,
   onSelect,
   isSelected,
+  now,
 }: {
   node: LayoutNode;
   onSelect: () => void;
   isSelected: boolean;
+  now: number;
 }) {
   const { agent, x, y } = node;
   const color = typeColor(agent.subagent_type);
   const isActive = agent.status === "active";
+  const isStuck =
+    isActive &&
+    now - agent.first_seen_ms > 120_000 &&
+    now - agent.last_seen_ms < 30_000;
   const statusColor =
-    isActive
-      ? STATUS_COLORS.active
-      : agent.status === "done"
-        ? STATUS_COLORS.done
-        : agent.status === "error"
-          ? STATUS_COLORS.error
-          : STATUS_COLORS.awaiting;
+    isStuck
+      ? "#f59e0b"
+      : isActive
+        ? STATUS_COLORS.active
+        : agent.status === "done"
+          ? STATUS_COLORS.done
+          : agent.status === "error"
+            ? STATUS_COLORS.error
+            : STATUS_COLORS.awaiting;
 
   const primaryLabel =
     agent.description && agent.description !== agent.subagent_type
@@ -176,12 +184,15 @@ function MiniDagNode({
       : agent.name;
   const typeLabel =
     agent.subagent_type ?? (agent.parent_id === null ? "root" : "agent");
+  const showTypePill = typeLabel !== primaryLabel;
 
   const borderColor = isSelected
     ? "#a78bfa"
-    : isActive
-      ? "var(--accent)"
-      : "var(--border)";
+    : isStuck
+      ? "#f59e0b"
+      : isActive
+        ? "var(--accent)"
+        : "var(--border)";
 
   return (
     <foreignObject x={x} y={y} width={NODE_W} height={NODE_H}>
@@ -228,9 +239,10 @@ function MiniDagNode({
           />
           <span
             style={{
-              fontSize: 10,
+              fontSize: 11,
+              fontWeight: 600,
               fontFamily: "monospace",
-              color: "var(--fg)",
+              color: "#fafafa",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
@@ -241,23 +253,25 @@ function MiniDagNode({
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 3, marginTop: 3, flexWrap: "wrap" }}>
-          <span
-            style={{
-              padding: "1px 4px",
-              borderRadius: 3,
-              fontSize: 9,
-              fontFamily: "monospace",
-              background: `${color}22`,
-              color,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              display: "inline-block",
-              maxWidth: "100%",
-            }}
-          >
-            {typeLabel}
-          </span>
+          {showTypePill && (
+            <span
+              style={{
+                padding: "1px 4px",
+                borderRadius: 3,
+                fontSize: 9,
+                fontFamily: "monospace",
+                background: `${color}22`,
+                color,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                display: "inline-block",
+                maxWidth: "100%",
+              }}
+            >
+              {typeLabel}
+            </span>
+          )}
           {isTeamWorker(agent) && (
             <span
               style={{
@@ -285,10 +299,12 @@ function MiniDag({
   agents,
   onSelectAgent,
   selectedAgentId,
+  now,
 }: {
   agents: Agent[];
   onSelectAgent: (id: string | null) => void;
   selectedAgentId?: string | null;
+  now: number;
 }) {
   const { nodes, svgWidth, svgHeight } = useMemo(
     () => computeLayout(agents),
@@ -358,6 +374,7 @@ function MiniDag({
           node={n}
           onSelect={() => onSelectAgent(n.agent.id)}
           isSelected={n.agent.id === selectedAgentId}
+          now={now}
         />
       ))}
     </svg>
@@ -426,6 +443,7 @@ function SessionCard({
             agents={visibleAgents}
             onSelectAgent={onSelectAgent}
             selectedAgentId={selectedAgentId}
+            now={now}
           />
           {hiddenCount > 0 && (
             <span className="mt-2 inline-block text-[10px] font-mono text-[var(--fg-subtle)]">

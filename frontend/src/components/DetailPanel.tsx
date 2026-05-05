@@ -7,6 +7,7 @@ import JsonView, { tryParseJson } from "./JsonView";
 import Markdown, { looksLikeMarkdown } from "./Markdown";
 import { summarizeTool } from "../utils/toolSummary";
 import { extractBrief } from "../utils/promptBrief";
+import { isTeamWorker } from "../utils/team";
 import { relativeTime } from "../utils/relativeTime";
 
 interface DetailPanelProps {
@@ -1019,11 +1020,18 @@ function PromptTab({ agent }: { agent: Agent }) {
 
   const regexBrief = extractBrief(text);
 
+  const isTeam = isTeamWorker(agent);
+
   return (
     <div className="space-y-2">
       <BriefCard agentId={agent.id} fallback={regexBrief} />
       {sourceLabel && (
         <div className="text-[10px] font-mono text-[var(--fg-subtle)]">{sourceLabel.trim()}</div>
+      )}
+      {isTeam && (
+        <div className="text-[10px] font-mono text-amber-400/80 bg-amber-500/5 border border-amber-500/20 rounded px-2 py-1">
+          Shared team brief. Per-worker assignment is in the Thread tab.
+        </div>
       )}
       <ExpandableBlock content={text} collapseThreshold={500} />
     </div>

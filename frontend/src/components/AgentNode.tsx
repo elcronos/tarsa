@@ -79,12 +79,14 @@ function AgentNode({ data }: NodeProps<AgentNodeData>) {
 
       {/* Type badge (small, monospace pill) + team badge + duration + error/stuck */}
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span
-          className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono leading-none"
-          style={{ backgroundColor: `${badgeColor}22`, color: badgeColor }}
-        >
-          {typeLabel}
-        </span>
+        {typeLabel !== primaryLabel && (
+          <span
+            className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono leading-none"
+            style={{ backgroundColor: `${badgeColor}22`, color: badgeColor }}
+          >
+            {typeLabel}
+          </span>
+        )}
 
         {/* Team badge — shown only for OMC team workers */}
         {isTeamWorker(agent) && (
@@ -96,19 +98,21 @@ function AgentNode({ data }: NodeProps<AgentNodeData>) {
           </span>
         )}
 
-        {/* Status label */}
+        {/* Status label — when stuck, replace running pill with stuck pill */}
         <span
           className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-mono leading-none ${
-            agent.status === "active"
-              ? "bg-blue-500/15 text-blue-400"
-              : agent.status === "awaiting"
-                ? "bg-amber-400/15 text-amber-400"
-                : agent.status === "done"
-                  ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-red-500/15 text-red-400"
+            isStuck
+              ? "bg-amber-500/15 text-amber-400"
+              : agent.status === "active"
+                ? "bg-blue-500/15 text-blue-400"
+                : agent.status === "awaiting"
+                  ? "bg-amber-400/15 text-amber-400"
+                  : agent.status === "done"
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : "bg-red-500/15 text-red-400"
           }`}
         >
-          {statusLabel[agent.status]}
+          {isStuck ? "stuck" : statusLabel[agent.status]}
         </span>
 
         {/* Duration */}
@@ -133,10 +137,6 @@ function AgentNode({ data }: NodeProps<AgentNodeData>) {
           </span>
         )}
 
-        {/* Stuck badge */}
-        {isStuck && (
-          <span className="ml-auto text-[10px] text-amber-400 font-mono">stuck</span>
-        )}
       </div>
 
       {/* Tool count */}
