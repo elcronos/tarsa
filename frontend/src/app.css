@@ -1,20 +1,21 @@
 @import "tailwindcss";
 
-/* ── Design tokens — Linear/Vercel dark palette ──────────────────────── */
+/* ── Design tokens — teal-lens palette (matches logo) ─────────────────── */
 :root {
-  --bg: #09090b;
-  --surface: #111113;
-  --surface-raised: #18181b;
-  --border: #27272a;
-  --border-subtle: #1c1c1f;
-  --fg: #fafafa;
-  --fg-muted: #a1a1aa;
-  --fg-subtle: #52525b;
-  --accent: #a78bfa;
-  --accent-dim: #7c3aed;
+  --bg: #08100f;
+  --surface: #0f1716;
+  --surface-raised: #15201f;
+  --border: #1f2d2c;
+  --border-subtle: #182423;
+  --fg: #f4faf9;
+  --fg-muted: #9ab0ad;
+  --fg-subtle: #5a6f6c;
+  --accent: #14b8a6;
+  --accent-dim: #0a6e67;
+  --accent-bright: #75cbbe;
   --blue: #3b82f6;
-  --green: #10b981;
-  --red: #ef4444;
+  --green: #34d399;
+  --red: #f87171;
   --amber: #f59e0b;
 
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
@@ -59,6 +60,23 @@ body,
   font-family: var(--font-mono);
 }
 
+/* ── Live pill glow + scale pulse ────────────────────────────────────── */
+@keyframes live-glow-pulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(20,184,166,0.4); transform: scale(1); }
+  50% { box-shadow: 0 0 12px rgba(20,184,166,0.6); transform: scale(1.03); }
+}
+
+.live-pill {
+  animation: live-glow-pulse 2.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-pill {
+    animation: none;
+    box-shadow: 0 0 8px rgba(20,184,166,0.4);
+  }
+}
+
 /* ── Stuck pulse animation ───────────────────────────────────────────── */
 @keyframes pulse-amber {
   0%, 100% { border-color: var(--amber); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
@@ -77,6 +95,50 @@ body,
 
 .active-pulse {
   animation: pulse-active 2s ease-in-out infinite;
+}
+
+/* ── Agent node: notched corner clip ────────────────────────────────── */
+.agent-node-frame {
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  background-image: repeating-linear-gradient(
+    transparent 0px 3px,
+    rgba(20, 184, 166, 0.04) 3px 4px
+  );
+}
+
+/* ── Active node: teal left border accent ────────────────────────────── */
+.agent-node-active-accent::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 1px;
+  background: var(--accent);
+  border-radius: 0;
+}
+
+/* ── Animated dashed edge for running agents ─────────────────────────── */
+@keyframes dash-flow {
+  from { stroke-dashoffset: 24; }
+  to   { stroke-dashoffset: 0; }
+}
+
+.react-flow__edge.edge-running .react-flow__edge-path {
+  stroke-dasharray: 6 4;
+  animation: dash-flow 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-node-frame {
+    background-image: none;
+  }
+  .stuck-pulse,
+  .active-pulse {
+    animation: none;
+  }
+  .react-flow__edge.edge-running .react-flow__edge-path {
+    animation: none;
+  }
 }
 
 /* ── React Flow overrides ────────────────────────────────────────────── */

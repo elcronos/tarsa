@@ -21,8 +21,16 @@ import { loadDismissed, addDismissed, removeDismissed } from "./utils/session_st
 import type { Session, AgentStatus } from "./types";
 import { ALL_STATUSES, type StatusFilterSet } from "./components/StatusFilter";
 
+function readSessionFromUrl(): string | null {
+  try {
+    return new URLSearchParams(window.location.search).get("session");
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(() => readSessionFromUrl());
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState("topology");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -152,8 +160,40 @@ export default function App() {
     }
   }, [selectedSessionId, visibleSessions]);
 
+  // Sync selectedSessionId into the browser URL (feature 13)
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (selectedSessionId) {
+      url.searchParams.set("session", selectedSessionId);
+    } else {
+      url.searchParams.delete("session");
+    }
+    window.history.replaceState(null, "", url.toString());
+  }, [selectedSessionId]);
+
   // Team tab visibility: show iff at least one team worker exists in displayState
   const showTeamTab = Array.from(displayState.agents.values()).some(isTeamWorker);
+
+  // Budget for the selected session — server value if present, else localStorage fallback
+  const sessionBudgetUsd = (() => {
+    if (!selectedSessionId) return undefined;
+    const session = state.sessions.get(selectedSessionId);
+    if (typeof session?.budget_usd === "number" && session.budget_usd > 0) {
+      return session.budget_usd;
+    }
+    try {
+      const raw = localStorage.getItem(`claudelens.budget.${selectedSessionId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { budget_usd?: number };
+        if (typeof parsed.budget_usd === "number" && parsed.budget_usd > 0) {
+          return parsed.budget_usd;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return undefined;
+  })();
 
   // Look up in displayState first (filtered view); fall back to baseState
   // so DetailPanel works when an agent is selected from a different session
@@ -239,6 +279,8 @@ export default function App() {
         projectFilter={projectFilter}
         onProjectFilterChange={setProjectFilter}
         showTeamTab={showTeamTab}
+        selectedSessionId={selectedSessionId}
+        sessionBudgetUsd={sessionBudgetUsd}
       />
 
       {/* Budget exceeded banner */}

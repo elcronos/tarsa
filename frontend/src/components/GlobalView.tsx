@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import type { State, Session, Agent } from "../types";
 import { formatDuration, formatTime } from "../utils/format";
 import { typeColor, STATUS_COLORS } from "../utils/colors";
@@ -458,7 +458,13 @@ function SessionCard({
 
 // ── GlobalView ───────────────────────────────────────────────────────────────
 export default function GlobalView({ state, onSelectAgent, statusFilter, onStatusFilterChange, selectedAgentId }: GlobalViewProps) {
-  const [showStale, setShowStale] = useState(false);
+  const SHOW_STALE_KEY = "claudelens.showStale";
+  const [showStale, setShowStale] = useState<boolean>(() => {
+    try { return localStorage.getItem(SHOW_STALE_KEY) === "true"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SHOW_STALE_KEY, String(showStale)); } catch {}
+  }, [showStale]);
   const now = useNow(5_000);
 
   const sessions = Array.from(state.sessions.values()).sort(

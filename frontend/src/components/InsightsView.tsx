@@ -4,6 +4,7 @@ import { formatDuration, formatCost } from "../utils/format";
 import StuckBadge from "./StuckBadge";
 import EmptyState from "./EmptyState";
 import { getCsrfToken } from "../hooks/useAgentState";
+import { authHeaders } from "../utils/auth";
 
 const BUDGET_LS_PREFIX = "claudelens.budget.";
 
@@ -160,6 +161,52 @@ function detectStuck(state: State): StuckSignal[] {
   }
 
   return signals;
+}
+
+// ── Stuck agent card with root cause hint ────────────────────────────────────
+
+function stuckHint(sig: StuckSignal, state: State): string {
+  const calls = state.tool_calls.get(sig.agentId) ?? [];
+  if (calls.length === 0) return "no tool activity";
+  const last = calls[calls.length - 1];
+  if (!last) return "no tool activity";
+  if (last.status === "error") return `last tool errored: ${last.tool_name}`;
+  if (last.status === "running") return `waiting on: ${last.tool_name}`;
+  return `last tool: ${last.tool_name}`;
+}
+
+function StuckAgentCard({ sig, state }: { sig: StuckSignal; state: State }) {
+  const [expanded, setExpanded] = useState(false);
+  const hint = stuckHint(sig, state);
+
+  return (
+    <div className="rounded border border-amber-500/30 bg-amber-500/10">
+      <div
+        className="flex items-start gap-2 px-3 py-2 cursor-pointer"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <StuckBadge reason={sig.detail} size="sm" />
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-mono text-amber-300 font-medium">
+            {sig.agentName}
+          </div>
+          <div className="text-[10px] font-mono text-amber-400/80 mt-0.5">
+            {sig.detail}
+          </div>
+        </div>
+        <span className="text-[9px] font-mono text-amber-400/60 shrink-0 mt-0.5 select-none">
+          {expanded ? "▲" : "▼"}
+        </span>
+      </div>
+      {expanded && (
+        <div className="px-3 pb-2 border-t border-amber-500/20">
+          <div className="text-[9px] font-mono text-amber-300/70 pt-1.5">
+            hint: {hint}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Cost stacked bar ─────────────────────────────────────────────────────────
@@ -528,6 +575,7 @@ function BudgetCard({
         headers: {
           "Content-Type": "application/json",
           "X-Claudelens-CSRF": token,
+          ...authHeaders(),
         },
         body: JSON.stringify({
           session_id: sessionId,
@@ -882,20 +930,7 @@ export default function InsightsView({ state }: InsightsViewProps) {
       {signals.length > 0 && (
         <div className="space-y-2">
           {signals.map((sig, i) => (
-            <div
-              key={i}
-              className="flex items-start gap-2 px-3 py-2 rounded border border-amber-500/30 bg-amber-500/10"
-            >
-              <StuckBadge reason={sig.detail} size="sm" />
-              <div className="min-w-0">
-                <div className="text-xs font-mono text-amber-300 font-medium">
-                  {sig.agentName}
-                </div>
-                <div className="text-[10px] font-mono text-amber-400/80 mt-0.5">
-                  {sig.detail}
-                </div>
-              </div>
-            </div>
+            <StuckAgentCard key={i} sig={sig} state={state} />
           ))}
         </div>
       )}

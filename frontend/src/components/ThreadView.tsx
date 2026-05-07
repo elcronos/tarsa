@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatTime } from "../utils/format";
+import LoadingDots from "./LoadingDots";
 
 export interface TranscriptMessage {
   type: string;
@@ -79,11 +80,7 @@ export default function ThreadView({ sessionId }: ThreadViewProps) {
   }, [sessionId]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8 text-[10px] font-mono text-[var(--fg-subtle)]">
-        Loading transcript…
-      </div>
-    );
+    return <LoadingDots label="transcript" />;
   }
 
   if (error || messages.length === 0) {

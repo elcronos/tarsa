@@ -21,6 +21,7 @@ import { openDatabase, setDb } from "./db.js";
 import { startServer } from "./server.js";
 import { seedFromDatabase } from "./search.js";
 import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -62,11 +63,26 @@ function parseArgs(argv: string[]): {
   port: number;
   noBrowser: boolean;
   enableIterationDetection: boolean;
+  host: string;
+  allowRemote: boolean;
 } {
   const args = argv.slice(2);
   // Iteration detection defaults ON; explicit --no-iteration-detection disables.
   const explicitDisable = args.includes("--no-iteration-detection");
   const explicitEnable = args.includes("--enable-iteration-detection");
+  const allowRemote = args.includes("--allow-remote");
+  const hostIdx = args.indexOf("--host");
+  const host = hostIdx !== -1 ? (args[hostIdx + 1] ?? "127.0.0.1") : "127.0.0.1";
+
+  // Refuse --host 0.0.0.0 (or any non-loopback) without --allow-remote
+  if (hostIdx !== -1 && host !== "127.0.0.1" && host !== "localhost" && !allowRemote) {
+    process.stderr.write(
+      `[claudelens] Error: --host ${host} requires --allow-remote flag.\n` +
+      `  Use: claudelens --host ${host} --allow-remote\n`
+    );
+    process.exit(1);
+  }
+
   return {
     installOnly: args.includes("--install-hooks"),
     upgradeHooks: args.includes("--upgrade-hooks"),
@@ -77,6 +93,8 @@ function parseArgs(argv: string[]): {
     })(),
     noBrowser: args.includes("--no-browser"),
     enableIterationDetection: explicitEnable || !explicitDisable,
+    host,
+    allowRemote,
   };
 }
 
@@ -131,6 +149,8 @@ async function appendEvent(eventName: string): Promise<void> {
   }
   payload["hook_event"] = eventName;
   payload["ts"] = Date.now();
+  // Missing schema_version in existing events is treated as v1.
+  payload["schema_version"] = 1;
   // Critic fix #5 / P5: read RALPH_ACTIVE at write time so the reducer can
   // stay pure (no env access in shared/replay-core.ts). Empty string when
   // unset — reducer treats only "1" as positive.
@@ -244,9 +264,22 @@ async function main(): Promise<void> {
   // Create processor (pass db so it can update baselines on session end)
   const processor = new EventProcessor(db);
 
+  // Generate auth token when --allow-remote is set (Jupyter-style)
+  let authToken: string | undefined;
+  if (opts.allowRemote) {
+    authToken = crypto.randomBytes(32).toString("hex");
+    const tokenDir = path.join(process.env["HOME"] ?? "~", ".claudelens");
+    fs.mkdirSync(tokenDir, { recursive: true, mode: 0o700 });
+    const tokenPath = path.join(tokenDir, "token");
+    fs.writeFileSync(tokenPath, authToken, { mode: 0o600 });
+    process.stderr.write(`[claudelens] Auth token: ${tokenPath}\n`);
+  }
+
   // Start HTTP server
-  const server = await startServer({ port: opts.port, processor, db });
-  const url = `http://localhost:${opts.port}`;
+  const server = await startServer({ port: opts.port, processor, db, host: opts.host, allowRemote: opts.allowRemote, authToken });
+  const host = opts.host === "0.0.0.0" ? "localhost" : opts.host;
+  const baseUrl = `http://${host}:${opts.port}`;
+  const url = opts.allowRemote && authToken ? `${baseUrl}?token=${authToken}` : baseUrl;
   console.log(`[claudelens] Server running at ${url}`);
 
   // Open browser after 1.5s delay

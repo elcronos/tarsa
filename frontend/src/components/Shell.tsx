@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { Session, Agent, Event, ToolCall } from "../types";
 import { formatDuration } from "../utils/format";
@@ -216,7 +216,13 @@ export default function Shell({
     ? (toolCalls.get(selectedAgent.id) ?? [])
     : [];
 
-  const [showStale, setShowStale] = useState(false);
+  const SHOW_STALE_KEY = "claudelens.showStale";
+  const [showStale, setShowStale] = useState<boolean>(() => {
+    try { return localStorage.getItem(SHOW_STALE_KEY) === "true"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SHOW_STALE_KEY, String(showStale)); } catch {}
+  }, [showStale]);
 
   // Sort sessions by started_at descending
   const allSorted = [...sessions].sort((a, b) => b.started_at - a.started_at);

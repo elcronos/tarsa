@@ -25,7 +25,8 @@ const COORD_TOOLS = new Set([
 function statusColor(tc: ToolCall): string {
   if (tc.status === "running") return "#06b6d4";
   if (tc.status === "error") return "#ef4444";
-  return "#71717a";
+  if (COORD_TOOLS.has(tc.tool_name)) return "#f59e0b";
+  return "#14b8a6";
 }
 
 function findRecipientWorkerId(
@@ -91,6 +92,13 @@ export default function TeamView({
   const toX = (tsMs: number): number =>
     LABEL_WIDTH + ((tsMs - minTs) / totalMs) * (chartWidth - LABEL_WIDTH - 8);
 
+  const LEGEND_ITEMS: Array<{ color: string; label: string; hint: string }> = [
+    { color: "#14b8a6", label: "tool · done", hint: "completed tool call" },
+    { color: "#06b6d4", label: "tool · running", hint: "in-flight tool call" },
+    { color: "#f59e0b", label: "coordination", hint: "SendMessage / TaskCreate / TaskUpdate" },
+    { color: "#ef4444", label: "error", hint: "tool returned error" },
+  ];
+
   return (
     <div className="h-full w-full overflow-auto p-4 relative">
       {tooltip && (
@@ -101,6 +109,24 @@ export default function TeamView({
           {tooltip.text}
         </div>
       )}
+
+      {/* Legend */}
+      <div className="mb-4 flex items-center gap-4 flex-wrap text-[10px] font-mono text-[var(--fg-muted)]">
+        <span className="text-[var(--fg-subtle)] uppercase tracking-wider">legend</span>
+        {LEGEND_ITEMS.map((it) => (
+          <span key={it.label} className="flex items-center gap-1.5" title={it.hint}>
+            <span
+              className="inline-block w-3 h-3 rounded-sm"
+              style={{ backgroundColor: it.color }}
+            />
+            <span>{it.label}</span>
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5" title="selected worker indicator">
+          <span className="inline-block w-1 h-3 rounded-sm" style={{ backgroundColor: "#14b8a6" }} />
+          <span>selected lane</span>
+        </span>
+      </div>
 
       {teams.map(([teamKey, workers]) => {
         const totalRows = workers.length;
@@ -133,8 +159,11 @@ export default function TeamView({
               {/* Lane backgrounds + labels */}
               {sortedWorkers.map((w, i) => {
                 const y = AXIS_HEIGHT + i * ROW_HEIGHT;
-                const role = teamRoleName(w) ?? w.name.slice(0, 18);
+                const rawRole = teamRoleName(w);
+                const fullLabel = rawRole ? `worker-${rawRole}` : w.name.slice(0, 18);
+                const idShort = w.id.slice(0, 6);
                 const isSelected = w.id === selectedAgentId;
+                const isAltRow = i % 2 === 1;
                 return (
                   <g key={`lane-${w.id}`}>
                     <rect
@@ -142,21 +171,40 @@ export default function TeamView({
                       y={y + 4}
                       width={chartWidth - LABEL_WIDTH - 8}
                       height={ROW_HEIGHT - 8}
-                      fill="#111113"
+                      fill={isAltRow ? "#0f1716" : "#111113"}
                       rx={2}
                     />
+                    {isSelected && (
+                      <rect
+                        x={0}
+                        y={y + 4}
+                        width={2}
+                        height={ROW_HEIGHT - 8}
+                        fill="#14b8a6"
+                      />
+                    )}
                     <text
-                      x={4}
-                      y={y + ROW_HEIGHT / 2 + 4}
+                      x={6}
+                      y={y + ROW_HEIGHT / 2 + 1}
                       fontSize={10}
                       fontFamily="var(--font-mono)"
-                      fill={isSelected ? "#fafafa" : "#a1a1aa"}
+                      fill={isSelected ? "#fafafa" : "#cfd9d7"}
                       className="cursor-pointer select-none"
                       onClick={() =>
                         onSelectAgent(w.id === selectedAgentId ? null : w.id)
                       }
                     >
-                      {role}
+                      {fullLabel}
+                    </text>
+                    <text
+                      x={6}
+                      y={y + ROW_HEIGHT / 2 + 12}
+                      fontSize={8}
+                      fontFamily="var(--font-mono)"
+                      fill="#5a6f6c"
+                      pointerEvents="none"
+                    >
+                      {idShort}
                     </text>
                   </g>
                 );

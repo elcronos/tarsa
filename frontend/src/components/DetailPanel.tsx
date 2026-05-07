@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import type { Agent, Event, ToolCall } from "../types";
+import type { Agent, Event, ToolCall, CostSource } from "../types";
 import { formatDuration, formatCost, formatTime } from "../utils/format";
 import { extractFilesTouched } from "../utils/files";
 import IOPair from "./IOPair";
@@ -9,6 +9,26 @@ import { summarizeTool } from "../utils/toolSummary";
 import { extractBrief } from "../utils/promptBrief";
 import { isTeamWorker } from "../utils/team";
 import { relativeTime } from "../utils/relativeTime";
+import LoadingDots from "./LoadingDots";
+
+function costSourceLabel(source: CostSource): string {
+  if (source === "measured") return "Measured";
+  if (source === "estimated_chars") return "Estimated (chars)";
+  return "Estimated (tool count)";
+}
+
+function CostProvenanceBadge({ source }: { source: CostSource }) {
+  const styles: Record<CostSource, string> = {
+    measured: "bg-green-500/15 text-green-400",
+    estimated_chars: "bg-amber-500/15 text-amber-400",
+    tool_count_fallback: "bg-[var(--surface-raised)] text-[var(--fg-subtle)]",
+  };
+  return (
+    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${styles[source]}`}>
+      {costSourceLabel(source)}
+    </span>
+  );
+}
 
 interface DetailPanelProps {
   agent: Agent;
@@ -54,11 +74,15 @@ function StatRow({ label, value }: { label: string; value: string }) {
 function ExpandableBlock({
   content,
   collapseThreshold = 500,
+  defaultExpanded = false,
 }: {
   content: string;
   collapseThreshold?: number;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(content.length <= collapseThreshold);
+  const [expanded, setExpanded] = useState(
+    defaultExpanded || content.length <= collapseThreshold
+  );
   const shouldCollapse = content.length > collapseThreshold;
   const parsed = tryParseJson(content);
 
@@ -152,6 +176,7 @@ function TraceRow({ tc }: { tc: ToolCall; maxDuration: number }) {
             input={tc.input && Object.keys(tc.input).length > 0 ? tc.input : undefined}
             output={tc.response ?? null}
             truncateAt={5000}
+            toolName={tc.tool_name}
           />
         </div>
       )}
@@ -170,6 +195,22 @@ function TraceTab({
   events: Event[];
   toolCalls: ToolCall[];
 }) {
+  const [costSource, setCostSource] = useState<CostSource | null>(null);
+
+  useEffect(() => {
+    if (!agent.session_id) return;
+    let cancelled = false;
+    fetch(`/api/insights?session=${encodeURIComponent(agent.session_id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { costEstimate?: { source?: CostSource } } | null) => {
+        if (!cancelled && data?.costEstimate?.source) {
+          setCostSource(data.costEstimate.source);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [agent.session_id]);
+
   const { totalUsd, tokenShare } = useMemo(() => {
     let inputTokens = 0;
     let outputTokens = 0;
@@ -228,7 +269,15 @@ function TraceTab({
         <StatRow label="duration" value={formatDuration(durationMs)} />
         <StatRow label="tool calls" value={String(agent.tool_count)} />
         <StatRow label="errors" value={String(agent.error_count)} />
-        <StatRow label="est. cost" value={totalUsd > 0 ? formatCost(totalUsd) : "–"} />
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-mono text-[var(--fg-subtle)]">est. cost</span>
+          <div className="flex items-center gap-1.5">
+            {costSource && <CostProvenanceBadge source={costSource} />}
+            <span className="text-[10px] font-mono text-[var(--fg-muted)]">
+              {totalUsd > 0 ? formatCost(totalUsd) : "–"}
+            </span>
+          </div>
+        </div>
         <StatRow label="token share" value={tokenShare > 0 ? `${tokenShare}%` : "–"} />
         {agent.anomaly_score !== undefined && (
           <StatRow label="anomaly score" value={String(agent.anomaly_score)} />
@@ -771,11 +820,7 @@ function ThreadTab({ agent }: { agent: Agent }) {
   };
 
   if (messages === null) {
-    return (
-      <div className="text-[10px] font-mono text-[var(--fg-subtle)] py-4 text-center">
-        Loading…
-      </div>
-    );
+    return <LoadingDots label="transcript" />;
   }
 
   if (messages.length === 0) {
@@ -1033,7 +1078,7 @@ function PromptTab({ agent }: { agent: Agent }) {
           Shared team brief. Per-worker assignment is in the Thread tab.
         </div>
       )}
-      <ExpandableBlock content={text} collapseThreshold={500} />
+      <ExpandableBlock content={text} collapseThreshold={500} defaultExpanded />
     </div>
   );
 }

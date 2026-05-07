@@ -331,6 +331,36 @@ export default function ReplayView({
     }
   }, [selectedId]);
 
+  // Keyboard navigation: ArrowLeft/ArrowRight step through filtered events
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const target = e.target as HTMLElement;
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA") return;
+      if (filtered.length === 0) return;
+      e.preventDefault();
+      const currentIdx = filtered.findIndex((ev) => ev.id === selectedId);
+      let nextIdx: number;
+      if (e.key === "ArrowRight") {
+        nextIdx = currentIdx < 0 ? 0 : Math.min(currentIdx + 1, filtered.length - 1);
+      } else {
+        nextIdx = currentIdx < 0 ? filtered.length - 1 : Math.max(currentIdx - 1, 0);
+      }
+      const nextEvent = filtered[nextIdx];
+      if (!nextEvent) return;
+      if (onSelectEvent) {
+        onSelectEvent(nextEvent.id);
+      } else {
+        setInternalSelected(nextEvent.id);
+      }
+      if (onSelectAgent && nextEvent.agent_id) {
+        onSelectAgent(nextEvent.agent_id);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [filtered, selectedId, onSelectEvent, onSelectAgent]);
+
   // Unique agent options for dropdown
   const agentOptions = useMemo(() => Array.from(agentNames.entries()), [agentNames]);
 

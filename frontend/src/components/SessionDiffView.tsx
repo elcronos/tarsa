@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSessionCompare } from "../hooks/useSessionCompare";
 import type { Agent, Session } from "../types";
 import { formatDuration } from "../utils/format";
+import LoadingDots from "./LoadingDots";
 
 // ── Session picker ────────────────────────────────────────────────────────────
 
@@ -136,11 +137,7 @@ export default function SessionDiffView() {
         <SessionPicker label="Session B (compare)" value={sessionB} onChange={setSessionB} />
       </div>
 
-      {loading && (
-        <div className="text-center text-[10px] font-mono text-[var(--fg-subtle)] py-4">
-          Loading…
-        </div>
-      )}
+      {loading && <LoadingDots label="comparing sessions" />}
 
       {/* Aggregate deltas */}
       {compareResult && (

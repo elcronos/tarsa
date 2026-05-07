@@ -24,6 +24,8 @@ import { isOrphanStub } from "../utils/orphan";
 import { useEffect } from "react";
 import StatusFilter, { type StatusFilterSet } from "./StatusFilter";
 
+const LEGEND_STORAGE_KEY = "claudelens.legendOpen";
+
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 80;
 
@@ -166,6 +168,25 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
+  // Legend open/closed state, persisted in localStorage
+  const [legendOpen, setLegendOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(LEGEND_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  const toggleLegend = useCallback(() => {
+    setLegendOpen((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(LEGEND_STORAGE_KEY, String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  // Edge hover state for label visibility
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+
   // Live tooltip for active nodes
   const now = useNow(1000);
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null);
@@ -259,22 +280,39 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
         const kind = classify(e.from_id, e.to_id);
         const target = state.agents.get(e.to_id);
         const isRunning = target?.status === "active";
-        // Live edges: kind color + animated. Finished edges: muted gray, static.
-        const color = isRunning ? edgeColors[kind] : "#3f3f46";
+        const isError = target?.status === "error";
+        const edgeId = `${e.from_id}->${e.to_id}`;
+        const isHovered = hoveredEdgeId === edgeId;
+
+        // Edge color: active=teal, error=amber, complete=faded border
+        const color = isRunning
+          ? "#14b8a6"
+          : isError
+            ? "#f59e0b"
+            : "var(--border)";
+        const opacity = isRunning ? 0.85 : isError ? 0.7 : 0.45;
+
         return {
-          id: `${e.from_id}->${e.to_id}`,
+          id: edgeId,
           source: e.from_id,
           target: e.to_id,
-          label: e.label,
-          animated: isRunning,
-          style: { stroke: color, strokeWidth: 1.5, opacity: isRunning ? 0.7 : 0.5 },
+          label: isHovered ? e.label : undefined,
+          animated: false,
+          className: isRunning ? "edge-running" : undefined,
+          style: {
+            stroke: color,
+            strokeWidth: isRunning ? 1.5 : 1,
+            opacity,
+            strokeDasharray: isRunning ? "6 4" : undefined,
+          },
           labelStyle: { fill: color, fontSize: 10, fontFamily: "var(--font-mono)" },
-          labelBgStyle: { fill: "#111113" },
+          labelBgStyle: { fill: "var(--surface, #111113)", fillOpacity: 1 },
+          labelShowBg: true,
         };
       });
 
     return getLayoutedElements(rawNodes, rawEdges, "LR");
-  }, [state.agents, state.edges, selectedAgentId, statusFilter]);
+  }, [state.agents, state.edges, selectedAgentId, statusFilter, hoveredEdgeId]);
 
   // Track whether the user has manually zoomed/panned. Only auto-fit on the
   // very first time nodes appear; after that the user controls the viewport.
@@ -299,6 +337,14 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
     onSelectAgent(null);
   }, [onSelectAgent]);
 
+  const onEdgeMouseEnter = useCallback((_: React.MouseEvent, edge: RFEdge) => {
+    setHoveredEdgeId(edge.id);
+  }, []);
+
+  const onEdgeMouseLeave = useCallback(() => {
+    setHoveredEdgeId(null);
+  }, []);
+
   if (state.agents.size === 0) {
     return <EmptyState message="No agents yet — start a Claude Code session" />;
   }
@@ -314,6 +360,8 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
       onPaneClick={onPaneClick}
       onNodeMouseEnter={onNodeMouseEnter}
       onNodeMouseLeave={onNodeMouseLeave}
+      onEdgeMouseEnter={onEdgeMouseEnter}
+      onEdgeMouseLeave={onEdgeMouseLeave}
       fitViewOptions={{ padding: 0.15 }}
       minZoom={0.3}
       maxZoom={2}
@@ -340,17 +388,66 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
           </div>
         </Panel>
       )}
-      <Panel position="bottom-left" className="!m-2">
-        <div className="rounded border border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur px-2 py-1.5 text-[10px] font-mono text-[var(--fg-subtle)] flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-px bg-[#22d3ee]" /> main
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-px bg-[#a78bfa]" /> nested
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-3 h-px bg-[#fb923c]" /> team
-          </span>
+      {/* Collapsible legend — bottom-right */}
+      <Panel position="bottom-right" className="!m-4">
+        <div className="flex flex-col items-end gap-1">
+          {legendOpen && (
+            <div
+              className="rounded border border-[var(--border)] bg-[var(--surface)] shadow-lg p-3 text-[11px] font-mono text-[var(--fg-muted)]"
+              style={{ width: 220 }}
+            >
+              <div className="text-[var(--fg)] font-semibold mb-2 text-[11px]">Legend</div>
+              {/* Edge colors */}
+              <div className="text-[var(--fg-muted)] uppercase tracking-wide text-[9px] mb-1">Edges</div>
+              <div className="flex flex-col gap-1 mb-2">
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-5 h-px bg-[#22d3ee]" />
+                  <span>root → subagent</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-5 h-px bg-[#a78bfa]" />
+                  <span>nested</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-5 h-px bg-[#fb923c]" />
+                  <span>team worker</span>
+                </span>
+              </div>
+              {/* Node status */}
+              <div className="text-[var(--fg-muted)] uppercase tracking-wide text-[9px] mb-1">Node status</div>
+              <div className="flex flex-col gap-1 mb-2">
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>running</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>complete</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
+                  <span>stuck</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                  <span>error</span>
+                </span>
+              </div>
+              {/* Team badge */}
+              <div className="text-[var(--fg-muted)] uppercase tracking-wide text-[9px] mb-1">Badges</div>
+              <span className="flex items-center gap-2">
+                <span className="rounded px-1 py-0.5 text-[9px] font-semibold bg-orange-500/20 text-orange-300 border border-orange-500/30">team</span>
+                <span>worker / team node</span>
+              </span>
+            </div>
+          )}
+          <button
+            onClick={toggleLegend}
+            className="rounded-full w-7 h-7 flex items-center justify-center border border-[var(--border)] bg-[var(--surface-raised)] text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface)] transition-colors text-[13px] font-semibold shadow"
+            title={legendOpen ? "Hide legend" : "Show legend"}
+          >
+            {legendOpen ? "×" : "?"}
+          </button>
         </div>
       </Panel>
       <Panel position="top-right" className="!m-2">

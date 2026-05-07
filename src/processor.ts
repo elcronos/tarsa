@@ -43,6 +43,8 @@ const defaultClock: Clock = {
   clearInterval: (id) => clearInterval(id),
 };
 
+const KNOWN_SCHEMA_VERSION = 1;
+
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const IDLE_CHECK_INTERVAL_MS = 30 * 1000; // 30 seconds
 
@@ -83,6 +85,13 @@ export class EventProcessor {
     if (!isValidEventShape(raw)) {
       process.stderr.write(
         `[claudelens] dropped invalid event shape: ${JSON.stringify(raw).slice(0, 200)}\n`
+      );
+      return;
+    }
+    // When v2 lands, branch processing logic on schema_version here. See ADR-0002.
+    if (raw["schema_version"] !== undefined && (raw["schema_version"] as number) > KNOWN_SCHEMA_VERSION) {
+      process.stderr.write(
+        `[claudelens] Unknown schema_version ${String(raw["schema_version"])}, skipping event\n`
       );
       return;
     }

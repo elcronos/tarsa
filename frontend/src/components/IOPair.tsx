@@ -1,10 +1,13 @@
 import { useState, useCallback } from "react";
-import JsonView, { tryParseJson } from "./JsonView";
+import JsonView, { tryParseJson, renderWithFilePaths } from "./JsonView";
+import DiffView from "./DiffView";
 
 interface IOPairProps {
   input?: unknown;
   output?: unknown;
   truncateAt?: number;
+  /** When provided, enables Edit tool diff rendering */
+  toolName?: string;
 }
 
 // ── Copy button ───────────────────────────────────────────────────────────────
@@ -40,7 +43,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// ── Code block with truncation ────────────────────────────────────────────────
+// ── Code block with truncation and file-path links (Goal 9) ──────────────────
 
 function CodeBlock({
   label,
@@ -64,7 +67,7 @@ function CodeBlock({
         <CopyButton text={text} />
       </div>
       <pre className="text-[10px] font-mono text-[var(--fg-muted)] bg-[var(--bg)] rounded p-2 whitespace-pre-wrap break-words max-h-64 overflow-y-auto overflow-x-auto leading-relaxed select-text">
-        {display}
+        {renderWithFilePaths(display)}
       </pre>
       {isTruncated && (
         <button
@@ -128,17 +131,61 @@ function JsonOrPre({
     );
   }
 
-  // Plain text fallback
+  // Plain text fallback (with file path links via renderWithFilePaths in CodeBlock)
   return <CodeBlock label={label} text={text} truncateAt={truncateAt} />;
+}
+
+// ── Edit input shape ──────────────────────────────────────────────────────────
+
+interface EditInput {
+  file_path: string;
+  old_string: string;
+  new_string: string;
+  replace_all?: boolean;
+}
+
+function isEditInput(v: unknown): v is EditInput {
+  if (v === null || typeof v !== "object" || Array.isArray(v)) return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    typeof obj["file_path"] === "string" &&
+    typeof obj["old_string"] === "string" &&
+    typeof obj["new_string"] === "string"
+  );
 }
 
 // ── IOPair ────────────────────────────────────────────────────────────────────
 
-export default function IOPair({ input, output, truncateAt = 5000 }: IOPairProps) {
+export default function IOPair({ input, output, truncateAt = 5000, toolName }: IOPairProps) {
   const hasInput = input !== undefined && input !== null;
   const hasOutput = output !== undefined && output !== null;
 
   if (!hasInput && !hasOutput) return null;
+
+  // Goal 10: Edit tool diff view
+  if (toolName === "Edit" && hasInput) {
+    // Resolve input to object if it's a JSON string
+    let editObj: unknown = input;
+    if (typeof input === "string") {
+      const parsed = tryParseJson(input);
+      if (parsed !== null) editObj = parsed;
+    }
+
+    if (isEditInput(editObj)) {
+      return (
+        <div className="mt-2 flex flex-col gap-3">
+          <DiffView
+            filePath={editObj.file_path}
+            oldString={editObj.old_string}
+            newString={editObj.new_string}
+          />
+          {hasOutput && (
+            <JsonOrPre label="output" value={output} truncateAt={truncateAt} />
+          )}
+        </div>
+      );
+    }
+  }
 
   const both = hasInput && hasOutput;
 

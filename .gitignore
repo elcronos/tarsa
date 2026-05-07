@@ -7,6 +7,9 @@ src/static/
 # OMC session/state files (private)
 .omc/
 
+# Claude Code local runtime state
+.claude/
+
 # IDE
 .vscode/
 .idea/

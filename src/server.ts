@@ -11,7 +11,7 @@ import { cors } from "hono/cors";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import crypto from "node:crypto";
 import { isBun } from "./runtime.js";
 import type { EventProcessor } from "./processor.js";
@@ -106,6 +106,27 @@ function runClaudeBrief(promptText: string): Promise<string> {
 }
 
 
+// ── Spawn session helper ──────────────────────────────────────────────────
+
+function checkBinaryOnPath(binary: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile("which", [binary], (err) => resolve(!err));
+  });
+}
+
+function spawnTmuxSession(sessionName: string, cwd: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      "tmux",
+      ["new-session", "-d", "-s", sessionName, "-c", cwd, "claude"],
+      (err) => {
+        if (err) reject(err);
+        else resolve();
+      }
+    );
+  });
+}
+
 function broadcast(data: string): void {
   const encoded = new TextEncoder().encode(data);
   const toRemove: SseClient[] = [];
@@ -150,10 +171,14 @@ export interface ServerOptions {
   port: number;
   processor: EventProcessor;
   db: Database;
+  host?: string;
+  allowRemote?: boolean;
+  authToken?: string;
 }
 
 export function createApp(opts: ServerOptions): Hono {
   const { processor, db } = opts;
+  const { allowRemote = false, authToken } = opts;
   const app = new Hono();
 
   // CORS — restrict to known local origins only
@@ -165,14 +190,34 @@ export function createApp(opts: ServerOptions): Hono {
   if (process.env.NODE_ENV !== "production") {
     corsOrigins.push("http://localhost:5173");
   }
+
+  // In remote mode, Authorization header is also allowed (for bearer token auth)
+  const allowHeaders = allowRemote
+    ? ["X-Claudelens-CSRF", "Authorization"]
+    : ["X-Claudelens-CSRF"];
+
   app.use(
     "*",
     cors({
       origin: corsOrigins,
       allowMethods: ["GET", "POST", "OPTIONS"],
-      allowHeaders: ["X-Claudelens-CSRF"],
+      allowHeaders,
     })
   );
+
+  // Auth middleware: only registered when --allow-remote is set.
+  // All POST routes require Authorization: Bearer <token>.
+  if (allowRemote && authToken) {
+    app.use("*", async (c, next) => {
+      if (c.req.method === "POST") {
+        const authHeader = c.req.header("Authorization");
+        if (!authHeader || authHeader !== `Bearer ${authToken}`) {
+          return c.json({ error: "Unauthorized" }, 401);
+        }
+      }
+      await next();
+    });
+  }
 
   // ── GET /api/state ──────────────────────────────────────────────────
   app.get("/api/state", (c) => {
@@ -585,6 +630,66 @@ export function createApp(opts: ServerOptions): Hono {
     return c.json({ session_total, per_agent });
   });
 
+  // ── POST /api/spawn ──────────────────────────────────────────────────
+  // Spawn a new tmux session running `claude` in a given cwd.
+  // ONLY permitted in localhost (default) mode. Returns 403 in --allow-remote mode.
+  // Uses execFile (argv array) — no shell interpolation.
+  app.post("/api/spawn", async (c) => {
+    if (allowRemote) {
+      return c.json({ error: "Spawn is not permitted in remote mode" }, 403);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json() as Record<string, unknown>;
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const cwd = body["cwd"];
+    if (typeof cwd !== "string" || !cwd) {
+      return c.json({ error: "cwd is required" }, 400);
+    }
+
+    // Input sanitization
+    if (!path.isAbsolute(cwd)) {
+      return c.json({ error: "cwd must be an absolute path" }, 400);
+    }
+    if (cwd.includes("\0")) {
+      return c.json({ error: "cwd contains invalid characters" }, 400);
+    }
+    if (!fs.existsSync(cwd)) {
+      return c.json({ error: "cwd does not exist" }, 400);
+    }
+    if (!fs.statSync(cwd).isDirectory()) {
+      return c.json({ error: "cwd is not a directory" }, 400);
+    }
+
+    const hasClaudeOnPath = await checkBinaryOnPath("claude");
+    if (!hasClaudeOnPath) {
+      return c.json({ error: "claude not found in PATH. Install Claude Code first." }, 400);
+    }
+
+    const hasTmux = await checkBinaryOnPath("tmux");
+    if (!hasTmux) {
+      return c.json({ error: "tmux not found. Install tmux to use spawn." }, 400);
+    }
+
+    const id = crypto.randomBytes(4).toString("hex");
+    const sessionName = `claudelens-${id}`;
+
+    try {
+      await spawnTmuxSession(sessionName, cwd);
+    } catch (err) {
+      return c.json({ error: `Failed to spawn tmux session: ${String(err)}` }, 500);
+    }
+
+    return c.json({
+      session_name: sessionName,
+      attach_cmd: `tmux attach -t ${sessionName}`,
+    });
+  });
+
   // ── Static files + SPA fallback ─────────────────────────────────────
   // HIGH-1: path traversal guard via realpathSync containment check.
   // c.req.path is already URL-decoded by Hono — do NOT call decodeURIComponent.
@@ -692,6 +797,8 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
     }
   });
 
+  const bindHost = opts.host ?? "127.0.0.1";
+
   if (isBun()) {
     const bunGlobal = globalThis as unknown as {
       Bun: {
@@ -704,7 +811,7 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
     };
     const server = bunGlobal.Bun.serve({
       port: opts.port,
-      hostname: "127.0.0.1",
+      hostname: bindHost,
       fetch: app.fetch,
     });
     return {
@@ -714,7 +821,7 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
     };
   } else {
     const { serve } = await import("@hono/node-server");
-    const server = serve({ fetch: app.fetch, port: opts.port, hostname: "127.0.0.1" });
+    const server = serve({ fetch: app.fetch, port: opts.port, hostname: bindHost });
     return {
       close() {
         server.close();

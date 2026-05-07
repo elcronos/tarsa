@@ -1,5 +1,37 @@
 import { useState } from "react";
 
+// ── File path linking (Goal 9) ────────────────────────────────────────────────
+
+const FILE_PATH_RE = /\/[\w./_-]+\.(ts|tsx|js|jsx|md|json|py|go|rs|css|html|sh|yaml|yml|toml|svg)\b/g;
+
+/** Render a string with embedded absolute file paths as VS Code links */
+export function renderWithFilePaths(text: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  FILE_PATH_RE.lastIndex = 0;
+  while ((match = FILE_PATH_RE.exec(text)) !== null) {
+    if (match.index > last) {
+      parts.push(text.slice(last, match.index));
+    }
+    const path = match[0];
+    parts.push(
+      <a
+        key={match.index}
+        href={`vscode://file${path}`}
+        title="Open in VS Code"
+        className="text-blue-400 hover:text-blue-300 hover:underline"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {path}
+      </a>
+    );
+    last = match.index + path.length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts.length === 0 ? text : <>{parts}</>;
+}
+
 /** Tries to parse content as JSON. Returns null if not JSON. */
 export function tryParseJson(text: string): unknown {
   const trimmed = text.trim();
@@ -36,7 +68,7 @@ function Node({ value, depth }: { value: unknown; depth: number }): React.ReactE
       <span>
         <button
           className={`${C_PUNC} hover:text-zinc-300 cursor-pointer`}
-          onClick={() => setOpen((v) => !v)}
+          onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
         >
           {empty ? "[]" : open ? "[" : `[ ... ${value.length} ]`}
         </button>
@@ -63,7 +95,7 @@ function Node({ value, depth }: { value: unknown; depth: number }): React.ReactE
       <span>
         <button
           className={`${C_PUNC} hover:text-zinc-300 cursor-pointer`}
-          onClick={() => setOpen((v) => !v)}
+          onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
         >
           {empty ? "{}" : open ? "{" : `{ ... ${keys.length} keys }`}
         </button>
@@ -90,20 +122,24 @@ function Node({ value, depth }: { value: unknown; depth: number }): React.ReactE
 function ExpandableString({ value, isLong }: { value: string; isLong: boolean }) {
   const [expanded, setExpanded] = useState(!isLong);
   if (!isLong) {
+    // Render with file path links; show escape sequences only for single-line short strings
+    const hasNewline = value.includes("\n");
+    const display = hasNewline ? value : value.replace(/\n/g, "\\n");
     return (
       <span className={C_STR}>
-        "{value.replace(/\n/g, "\\n")}"
+        "{renderWithFilePaths(display)}"
       </span>
     );
   }
+  const displayValue = expanded ? value : value.slice(0, 200) + "...";
   return (
     <span>
       <span className={C_STR}>
-        "{expanded ? value : value.slice(0, 200) + "..."}"
+        "{renderWithFilePaths(displayValue)}"
       </span>
       <button
         className="ml-1 text-[10px] text-zinc-500 hover:text-zinc-300 underline"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={(e) => { e.stopPropagation(); setExpanded((v) => !v); }}
       >
         {expanded ? "less" : `+${value.length - 200} chars`}
       </button>

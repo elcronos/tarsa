@@ -3,6 +3,7 @@ import { Handle, Position } from "reactflow";
 import type { NodeProps } from "reactflow";
 import type { Agent } from "../types";
 import { formatDuration } from "../utils/format";
+import { formatRelative, absoluteISO } from "../utils/relativeTime";
 import { typeColor } from "../utils/colors";
 import { useNow } from "../hooks/useNow";
 import { isTeamWorker, teamRoleName } from "../utils/team";
@@ -56,6 +57,8 @@ function AgentNode({ data }: NodeProps<AgentNodeData>) {
   return (
     <div
       className={`
+        agent-node-frame
+        ${isActive ? "agent-node-active-accent" : ""}
         relative min-w-[160px] max-w-[220px] rounded-md border bg-[var(--surface-raised)]
         px-3 py-2 text-[var(--fg)] shadow-sm transition-all
         ${borderColor}
@@ -124,9 +127,12 @@ function AgentNode({ data }: NodeProps<AgentNodeData>) {
 
         {/* Idle / finished label */}
         {(agent.status === "awaiting" || agent.status === "done" || agent.status === "error") && (
-          <span className="text-[10px] text-[var(--fg-subtle)] font-mono">
+          <span
+            className="text-[10px] text-[var(--fg-subtle)] font-mono"
+            title={absoluteISO(agent.ended_at ?? agent.last_seen_ms)}
+          >
             {agent.status === "awaiting" ? "idle " : "ended "}
-            {formatDuration(now - (agent.ended_at ?? agent.last_seen_ms))} ago
+            {formatRelative(agent.ended_at ?? agent.last_seen_ms)}
           </span>
         )}
 

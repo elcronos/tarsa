@@ -141,6 +141,56 @@ const STATUS_COLORS: Record<string, string> = {
   stuck: "#f59e0b",
 };
 
+// ── Mini-map overview bar ────────────────────────────────────────────────────
+
+function TimelineMiniMap({
+  rows,
+  minTs,
+  totalMs,
+}: {
+  rows: AgentRow[];
+  minTs: number;
+  totalMs: number;
+}) {
+  if (rows.length === 0 || totalMs === 0) return null;
+
+  const W = 800;
+  const H = 30;
+
+  // Group agents by their color bucket for visual segments
+  const segments = rows.map((row) => {
+    const left = ((row.startMs - minTs) / totalMs) * W;
+    const width = Math.max(((row.endMs - row.startMs) / totalMs) * W, 2);
+    const color = STATUS_COLORS[row.agent.status] ?? STATUS_COLORS["done"]!;
+    return { left, width, color, name: row.agent.name };
+  });
+
+  return (
+    <div
+      className="mb-3 rounded border border-[var(--border)] overflow-hidden"
+      style={{ height: H, position: "relative", background: "var(--bg)" }}
+      aria-label="Timeline overview"
+    >
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        {segments.map((seg, i) => (
+          <rect
+            key={i}
+            x={seg.left}
+            y={4}
+            width={seg.width}
+            height={H - 8}
+            fill={seg.color}
+            fillOpacity={0.55}
+            rx={1}
+          >
+            <title>{seg.name}</title>
+          </rect>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 export default function TimelineView({
   state,
   selectedAgentId,
@@ -252,6 +302,9 @@ export default function TimelineView({
 
   return (
     <div ref={containerRef} className="h-full w-full overflow-auto p-4 relative">
+      {/* Mini-map overview */}
+      <TimelineMiniMap rows={rows} minTs={minTs} totalMs={totalMs} />
+
       {/* Legend + StatusFilter */}
       <div className="flex items-center gap-4 mb-3 flex-wrap">
         {(["active", "done", "error", "stuck"] as const).map((s) => (
@@ -374,7 +427,9 @@ export default function TimelineView({
         })}
 
         {/* Agent rows — positioned by rowIndex, not array index */}
-        {rows.map((row) => {
+        {(() => {
+          const seenRowIndex = new Set<number>();
+          return rows.map((row) => {
           const y = AXIS_HEIGHT + row.rowIndex * ROW_HEIGHT + 4;
           const durationMs = row.endMs - row.startMs;
           const x1 = toX(row.startMs, chartWidth);
@@ -383,21 +438,25 @@ export default function TimelineView({
           const barW = Math.max(rawX2 - x1, minBarW);
           const isSelected = row.agent.id === selectedAgentId;
           const color = barColor(row.agent);
+          const showLabel = !seenRowIndex.has(row.rowIndex);
+          seenRowIndex.add(row.rowIndex);
 
           return (
             <g key={row.agent.id}>
-              {/* Label with depth-based left padding */}
-              <text
-                x={4 + row.leftPadding}
-                y={y + BAR_HEIGHT / 2 + 4}
-                fontSize={10}
-                fontFamily="var(--font-mono)"
-                fill={isSelected ? "#fafafa" : "#a1a1aa"}
-                className="cursor-pointer select-none"
-                onClick={() => handleBarClick(row.agent.id)}
-              >
-                {row.agent.name.slice(0, Math.max(8, 18 - row.depth * 2))}
-              </text>
+              {/* Label with depth-based left padding (only for first agent in each rowIndex) */}
+              {showLabel && (
+                <text
+                  x={4 + row.leftPadding}
+                  y={y + BAR_HEIGHT / 2 + 4}
+                  fontSize={10}
+                  fontFamily="var(--font-mono)"
+                  fill={isSelected ? "#fafafa" : "#a1a1aa"}
+                  className="cursor-pointer select-none"
+                  onClick={() => handleBarClick(row.agent.id)}
+                >
+                  {row.agent.name.slice(0, Math.max(8, 18 - row.depth * 2))}
+                </text>
+              )}
 
               {/* Bar background track — only render once per unique rowIndex
                   (multiple agents can share a row for sequential placement) */}
@@ -457,7 +516,8 @@ export default function TimelineView({
               )}
             </g>
           );
-        })}
+        });
+        })()}
       </svg>
     </div>
   );
