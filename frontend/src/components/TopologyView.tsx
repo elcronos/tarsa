@@ -291,6 +291,12 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
             ? "#f59e0b"
             : "var(--border)";
         const opacity = isRunning ? 0.85 : isError ? 0.7 : 0.45;
+        // Label color must stay readable even when edge is dim/faded.
+        const labelColor = isRunning
+          ? "#5eead4"
+          : isError
+            ? "#fbbf24"
+            : "#e4e4e7";
 
         return {
           id: edgeId,
@@ -298,6 +304,7 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
           target: e.to_id,
           label: isHovered ? e.label : undefined,
           animated: false,
+          zIndex: isHovered ? 1000 : 0,
           className: isRunning ? "edge-running" : undefined,
           style: {
             stroke: color,
@@ -305,8 +312,10 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
             opacity,
             strokeDasharray: isRunning ? "6 4" : undefined,
           },
-          labelStyle: { fill: color, fontSize: 10, fontFamily: "var(--font-mono)" },
-          labelBgStyle: { fill: "var(--surface, #111113)", fillOpacity: 1 },
+          labelStyle: { fill: labelColor, fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 500 },
+          labelBgStyle: { fill: "#1a1a1f", fillOpacity: 0.95, stroke: labelColor, strokeOpacity: 0.4, strokeWidth: 0.5 },
+          labelBgPadding: [6, 4],
+          labelBgBorderRadius: 4,
           labelShowBg: true,
         };
       });

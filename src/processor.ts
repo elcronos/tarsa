@@ -96,6 +96,12 @@ export class EventProcessor {
       return;
     }
     const event = raw as unknown as Event;
+    if (!event.id) {
+      event.id = createHash("sha1")
+        .update(`${event.session_id}:${event.ts}:${this._events.length}`)
+        .digest("hex")
+        .slice(0, 16);
+    }
     this._events.push(event);
     this._state = applyEvent(this._state, event);
     this._notifySubscribers(event, this._state);

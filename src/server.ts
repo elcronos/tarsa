@@ -522,6 +522,61 @@ export function createApp(opts: ServerOptions): Hono {
     if (agent.prompt && agent.prompt.trim()) {
       return c.json({ prompt: agent.prompt, source: "stored" });
     }
+    // Prefer parent's spawning tool call input.prompt — for OMC team workers
+    // the worker's own transcript starts with the parent's slash-command meta,
+    // so firstUserMessage returns the same text for every worker. The Agent
+    // tool input on the parent has the per-worker assignment.
+    if (agent.spawn_tool_use_id && agent.parent_id) {
+      const parentToolCalls = processor.state.tool_calls.get(agent.parent_id) ?? [];
+      const tc = parentToolCalls.find((t) => t.id === agent.spawn_tool_use_id);
+      const inputPrompt = tc?.input?.["prompt"];
+      if (typeof inputPrompt === "string" && inputPrompt.trim()) {
+        return c.json({ prompt: inputPrompt, source: "spawn_tool" });
+      }
+    }
+    // Fallback for OMC team workers spawned outside the Agent tool: scan the
+    // parent's Agent tool calls for one whose subagent_type matches and whose
+    // start time is closest to (and before) this agent's first_seen_ms.
+    if (agent.parent_id && agent.subagent_type) {
+      const parentToolCalls = processor.state.tool_calls.get(agent.parent_id) ?? [];
+      let best: { prompt: string; ts: number } | null = null;
+      for (const tc of parentToolCalls) {
+        if (tc.tool_name !== "Agent") continue;
+        const inSub = tc.input?.["subagent_type"];
+        const inPrompt = tc.input?.["prompt"];
+        if (typeof inPrompt !== "string" || !inPrompt.trim()) continue;
+        if (typeof inSub === "string" && inSub === agent.subagent_type) {
+          if (tc.started_ms <= agent.first_seen_ms + 5000) {
+            if (!best || tc.started_ms > best.ts) {
+              best = { prompt: inPrompt, ts: tc.started_ms };
+            }
+          }
+        }
+      }
+      if (best) {
+        return c.json({ prompt: best.prompt, source: "spawn_tool" });
+      }
+      // Final fallback: SendMessage tool calls targeting this worker. Concatenate
+      // the first few so the user sees the orchestrator's per-worker instructions.
+      const sendMessages = parentToolCalls
+        .filter(
+          (tc) =>
+            tc.tool_name === "SendMessage" &&
+            tc.input?.["to"] === agent.subagent_type
+        )
+        .sort((a, b) => a.started_ms - b.started_ms)
+        .slice(0, 5);
+      if (sendMessages.length > 0) {
+        const text = sendMessages
+          .map((tc, i) => {
+            const msg =
+              tc.input?.["message"] ?? tc.input?.["prompt"] ?? tc.input?.["text"] ?? "";
+            return `── SendMessage #${i + 1} ──\n${String(msg)}`;
+          })
+          .join("\n\n");
+        return c.json({ prompt: text, source: "send_messages" });
+      }
+    }
     if (agent.transcript_path) {
       const fromTranscript = firstUserMessage(agent.transcript_path);
       if (fromTranscript) {
@@ -543,6 +598,14 @@ export function createApp(opts: ServerOptions): Hono {
     const agent = processor.state.agents.get(id);
     if (!agent) return c.json({ error: "Agent not found" }, 404);
     let promptText = agent.prompt && agent.prompt.trim() ? agent.prompt : null;
+    if (!promptText && agent.spawn_tool_use_id && agent.parent_id) {
+      const parentToolCalls = processor.state.tool_calls.get(agent.parent_id) ?? [];
+      const tc = parentToolCalls.find((t) => t.id === agent.spawn_tool_use_id);
+      const inputPrompt = tc?.input?.["prompt"];
+      if (typeof inputPrompt === "string" && inputPrompt.trim()) {
+        promptText = inputPrompt;
+      }
+    }
     if (!promptText && agent.transcript_path) {
       promptText = firstUserMessage(agent.transcript_path);
     }
@@ -768,8 +831,12 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
   const { processor } = opts;
   const app = createApp(opts);
 
-  // Build full-text search index from existing events
-  buildIndex(Array.from(processor.events));
+  // Build full-text search index from existing events.
+  // Only rebuild when the processor has its own event log; otherwise we'd
+  // wipe out the index seeded from the database in cli.ts.
+  if (processor.events.length > 0) {
+    buildIndex(Array.from(processor.events));
+  }
 
   // Track sessions whose budget has already been reported as exceeded so
   // we only emit one budget-exceeded event per crossing.

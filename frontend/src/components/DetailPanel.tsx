@@ -1037,6 +1037,8 @@ function PromptTab({ agent }: { agent: Agent }) {
   const [fetched, setFetched] = useState<{ prompt: string | null; source: string } | null>(
     null
   );
+  const isTeam = isTeamWorker(agent);
+
   useEffect(() => {
     if (agent.prompt && agent.prompt.trim()) return;
     let cancelled = false;
@@ -1052,8 +1054,7 @@ function PromptTab({ agent }: { agent: Agent }) {
   }, [agent.id, agent.prompt]);
 
   const text = (agent.prompt && agent.prompt.trim()) ? agent.prompt : fetched?.prompt ?? null;
-  const sourceLabel =
-    fetched?.source === "transcript" ? " (from transcript)" : "";
+  const source = (agent.prompt && agent.prompt.trim()) ? "stored" : (fetched?.source ?? "none");
 
   if (!text) {
     return (
@@ -1065,17 +1066,29 @@ function PromptTab({ agent }: { agent: Agent }) {
 
   const regexBrief = extractBrief(text);
 
-  const isTeam = isTeamWorker(agent);
+  // source labels — make clear what the user is looking at
+  const sourceMeta: Record<string, { label: string; tone: string }> = {
+    stored: { label: "captured at spawn", tone: "text-emerald-400" },
+    spawn_tool: { label: "per-worker assignment · from parent Agent call", tone: "text-blue-400" },
+    send_messages: { label: "per-worker SendMessage history · from parent", tone: "text-blue-400" },
+    transcript: { label: "first user message from transcript (may be shared)", tone: "text-amber-400" },
+  };
+  const meta = sourceMeta[source];
+
+  // Warn when transcript fallback was used for a team worker — that text is
+  // usually the parent's slash-command, identical across all workers.
+  const transcriptFallbackOnTeam = isTeam && source === "transcript";
 
   return (
     <div className="space-y-2">
       <BriefCard agentId={agent.id} fallback={regexBrief} />
-      {sourceLabel && (
-        <div className="text-[10px] font-mono text-[var(--fg-subtle)]">{sourceLabel.trim()}</div>
+      {meta && (
+        <div className={`text-[10px] font-mono ${meta.tone}`}>{meta.label}</div>
       )}
-      {isTeam && (
+      {transcriptFallbackOnTeam && (
         <div className="text-[10px] font-mono text-amber-400/80 bg-amber-500/5 border border-amber-500/20 rounded px-2 py-1">
-          Shared team brief. Per-worker assignment is in the Thread tab.
+          Per-worker assignment not captured. Showing transcript first user message —
+          this is usually the parent's slash command and identical across workers.
         </div>
       )}
       <ExpandableBlock content={text} collapseThreshold={500} defaultExpanded />
