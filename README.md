@@ -12,10 +12,20 @@ Live observability for Claude Code agent sessions. Topology, timeline, tool I/O,
 
 Requires Node 20+ or Bun 1.x.
 
+**One-line install (clones, builds frontend, installs global):**
+
 ```sh
-npx claudelens        # zero-install, Node
+curl -fsSL https://raw.githubusercontent.com/elcronos/claudelens/main/install.sh | sh
+```
+
+Source lives at `~/.claudelens-src`. Override with `CLAUDELENS_HOME=/custom/path`.
+
+**Or zero-install run:**
+
+```sh
+npx claudelens        # Node
 # or
-bunx claudelens       # zero-install, Bun
+bunx claudelens       # Bun
 ```
 
 First run installs hooks into `~/.claude/settings.json` and opens `http://localhost:8100`. Start a Claude Code session in any project; agents appear in real time.
