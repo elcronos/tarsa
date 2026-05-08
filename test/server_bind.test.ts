@@ -24,7 +24,7 @@ describe("CLI --host / --allow-remote validation", () => {
       const host = hostIdx !== -1 ? (args[hostIdx + 1] ?? "127.0.0.1") : "127.0.0.1";
       if (hostIdx !== -1 && host !== "127.0.0.1" && host !== "localhost" && !allowRemote) {
         process.stderr.write(
-          `[claudelens] Error: --host ${host} requires --allow-remote flag.\n`
+          `[tarsa] Error: --host ${host} requires --allow-remote flag.\n`
         );
         process.exit(1);
       }

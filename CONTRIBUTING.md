@@ -1,4 +1,4 @@
-# Contributing to ClaudeLens
+# Contributing to Tarsa
 
 ## Prerequisites
 
@@ -9,8 +9,8 @@
 ## Dev Setup
 
 ```sh
-git clone https://github.com/elcronos/claudelens
-cd claudelens
+git clone https://github.com/elcronos/tarsa
+cd tarsa
 npm install
 cd frontend && npm install && cd ..
 npm run dev          # Vite dev server at :5173, proxies API to :8100
@@ -19,7 +19,7 @@ npm run dev          # Vite dev server at :5173, proxies API to :8100
 In a second terminal:
 
 ```sh
-npx claudelens --no-browser   # start the server without opening browser
+npx tarsa --no-browser   # start the server without opening browser
 ```
 
 ## Testing
@@ -53,7 +53,7 @@ Tests live under `test/`. Each test file maps to a source module. Add tests alon
 
 - Events are append-only; never mutate persisted events.
 - `replayToTimestamp(events, ts)` in `src/shared/replay-core.ts` is the single source of truth for derived state.
-- Hooks write to `/tmp/claudelens.jsonl`; the tailer picks them up. Do not write directly to the DB from hooks.
+- Hooks write to `/tmp/tarsa.jsonl`; the tailer picks them up. Do not write directly to the DB from hooks.
 - All auth machinery is gated behind `--allow-remote`. Default localhost mode has zero auth overhead.
 - The `bun:sqlite` / `better-sqlite3` split is abstracted in `src/db.ts` — do not import either directly outside that file.
 

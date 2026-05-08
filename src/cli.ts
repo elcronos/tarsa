@@ -1,14 +1,14 @@
 /**
- * ClaudeLens CLI entry point.
+ * Tarsa CLI entry point.
  *
  * Phase B: installs hooks + starts DB + starts tailer + starts server + opens browser.
  *
  * Usage:
- *   claudelens                   # install hooks + start server + open browser
- *   claudelens --install-hooks   # install hooks only, then exit
- *   claudelens --uninstall       # remove claudelens hooks, then exit
- *   claudelens --port 8100       # server port (default 8100)
- *   claudelens --no-browser      # skip browser open
+ *   tarsa                   # install hooks + start server + open browser
+ *   tarsa --install-hooks   # install hooks only, then exit
+ *   tarsa --uninstall       # remove tarsa hooks, then exit
+ *   tarsa --port 8100       # server port (default 8100)
+ *   tarsa --no-browser      # skip browser open
  */
 
 import { installHooks, uninstallHooks, upgradeHooks, JSONL_PATH } from "./hooks.js";
@@ -26,22 +26,22 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * Ensure ~/.claudelens/ exists (mode 0700) and events.jsonl is created with
- * mode 0600. Also performs a one-time migration from /tmp/claudelens.jsonl if
+ * Ensure ~/.tarsa/ exists (mode 0700) and events.jsonl is created with
+ * mode 0600. Also performs a one-time migration from /tmp/tarsa.jsonl if
  * that legacy file exists and the new path does not yet.
  */
 function ensureJsonlPath(): void {
   const dir = path.dirname(JSONL_PATH);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 
-  // One-time migration from /tmp/claudelens.jsonl
-  const legacyPath = "/tmp/claudelens.jsonl";
+  // One-time migration from /tmp/tarsa.jsonl
+  const legacyPath = "/tmp/tarsa.jsonl";
   if (fs.existsSync(legacyPath) && !fs.existsSync(JSONL_PATH)) {
     try {
       fs.copyFileSync(legacyPath, JSONL_PATH);
       fs.chmodSync(JSONL_PATH, 0o600);
       process.stderr.write(
-        `[claudelens] Migrated events from ${legacyPath} to ${JSONL_PATH}. ` +
+        `[tarsa] Migrated events from ${legacyPath} to ${JSONL_PATH}. ` +
         `You can delete the old file with: rm ${legacyPath}\n`
       );
     } catch {
@@ -77,8 +77,8 @@ function parseArgs(argv: string[]): {
   // Refuse --host 0.0.0.0 (or any non-loopback) without --allow-remote
   if (hostIdx !== -1 && host !== "127.0.0.1" && host !== "localhost" && !allowRemote) {
     process.stderr.write(
-      `[claudelens] Error: --host ${host} requires --allow-remote flag.\n` +
-      `  Use: claudelens --host ${host} --allow-remote\n`
+      `[tarsa] Error: --host ${host} requires --allow-remote flag.\n` +
+      `  Use: tarsa --host ${host} --allow-remote\n`
     );
     process.exit(1);
   }
@@ -179,9 +179,9 @@ async function main(): Promise<void> {
   if (opts.uninstall) {
     const changed = uninstallHooks();
     if (changed) {
-      console.log("[claudelens] Hooks removed from ~/.claude/settings.json");
+      console.log("[tarsa] Hooks removed from ~/.claude/settings.json");
     } else {
-      console.log("[claudelens] No ClaudeLens hooks found to remove.");
+      console.log("[tarsa] No Tarsa hooks found to remove.");
     }
     process.exit(0);
   }
@@ -189,9 +189,9 @@ async function main(): Promise<void> {
   if (opts.upgradeHooks) {
     const added = upgradeHooks();
     if (added.length > 0) {
-      console.log(`[claudelens] Upgraded hooks; added: ${added.join(", ")}`);
+      console.log(`[tarsa] Upgraded hooks; added: ${added.join(", ")}`);
     } else {
-      console.log("[claudelens] Hooks already up to date.");
+      console.log("[tarsa] Hooks already up to date.");
     }
     process.exit(0);
   }
@@ -199,9 +199,9 @@ async function main(): Promise<void> {
   // Always install hooks (idempotent, additive — adds any newly-required events)
   const changed = installHooks();
   if (changed) {
-    console.log("[claudelens] Hooks installed into ~/.claude/settings.json");
+    console.log("[tarsa] Hooks installed into ~/.claude/settings.json");
   } else {
-    console.log("[claudelens] Hooks already installed.");
+    console.log("[tarsa] Hooks already installed.");
   }
 
   if (opts.installOnly) {
@@ -213,16 +213,16 @@ async function main(): Promise<void> {
   try {
     await migrateLegacyDbIfPresent();
   } catch (err) {
-    process.stderr.write(`[claudelens] legacy DB migration skipped: ${String(err)}\n`);
+    process.stderr.write(`[tarsa] legacy DB migration skipped: ${String(err)}\n`);
   }
 
   const runtime = detectRuntime();
-  console.log(`[claudelens] Runtime: ${runtime}`);
+  console.log(`[tarsa] Runtime: ${runtime}`);
 
   // Open database
   const db = await openDatabase();
   setDb(db);
-  console.log("[claudelens] Database ready.");
+  console.log("[tarsa] Database ready.");
 
   // One-time cwd backfill for sessions persisted before v5. For each session
   // missing cwd, scan its events for any agent transcript_path and derive cwd
@@ -246,20 +246,20 @@ async function main(): Promise<void> {
       }
     }
     if (backfilled > 0) {
-      console.log(`[claudelens] Backfilled cwd for ${backfilled} session(s)`);
+      console.log(`[tarsa] Backfilled cwd for ${backfilled} session(s)`);
     }
   } catch (err) {
-    process.stderr.write(`[claudelens] cwd backfill skipped: ${String(err)}\n`);
+    process.stderr.write(`[tarsa] cwd backfill skipped: ${String(err)}\n`);
   }
 
   // Tell processor whether to compute / persist iterations.
   if (!opts.enableIterationDetection) {
-    process.env["CLAUDELENS_ITERATION_DETECTION"] = "0";
+    process.env["TARSA_ITERATION_DETECTION"] = "0";
   }
 
   // Seed search index from persisted events
   const seeded = seedFromDatabase(db, 10000);
-  console.log(`[claudelens] search index seeded ${seeded} events`);
+  console.log(`[tarsa] search index seeded ${seeded} events`);
 
   // Create processor (pass db so it can update baselines on session end)
   const processor = new EventProcessor(db);
@@ -268,11 +268,11 @@ async function main(): Promise<void> {
   let authToken: string | undefined;
   if (opts.allowRemote) {
     authToken = crypto.randomBytes(32).toString("hex");
-    const tokenDir = path.join(process.env["HOME"] ?? "~", ".claudelens");
+    const tokenDir = path.join(process.env["HOME"] ?? "~", ".tarsa");
     fs.mkdirSync(tokenDir, { recursive: true, mode: 0o700 });
     const tokenPath = path.join(tokenDir, "token");
     fs.writeFileSync(tokenPath, authToken, { mode: 0o600 });
-    process.stderr.write(`[claudelens] Auth token: ${tokenPath}\n`);
+    process.stderr.write(`[tarsa] Auth token: ${tokenPath}\n`);
   }
 
   // Start HTTP server
@@ -280,7 +280,7 @@ async function main(): Promise<void> {
   const host = opts.host === "0.0.0.0" ? "localhost" : opts.host;
   const baseUrl = `http://${host}:${opts.port}`;
   const url = opts.allowRemote && authToken ? `${baseUrl}?token=${authToken}` : baseUrl;
-  console.log(`[claudelens] Server running at ${url}`);
+  console.log(`[tarsa] Server running at ${url}`);
 
   // Open browser after 1.5s delay
   if (!opts.noBrowser) {
@@ -291,12 +291,12 @@ async function main(): Promise<void> {
 
   // Ensure JSONL dir/file exists before tailing
   ensureJsonlPath();
-  console.log(`[claudelens] Tailing ${JSONL_PATH} ...`);
+  console.log(`[tarsa] Tailing ${JSONL_PATH} ...`);
 
   const controller = new AbortController();
 
   process.on("SIGINT", () => {
-    console.log("\n[claudelens] Shutting down...");
+    console.log("\n[tarsa] Shutting down...");
     processor.stopIdleCheck();
     controller.abort();
     server.close();
@@ -312,6 +312,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error("[claudelens] Fatal:", err);
+  console.error("[tarsa] Fatal:", err);
   process.exit(1);
 });

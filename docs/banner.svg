@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="ClaudeLens — live observability for Claude Code">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="Tarsa — live observability for Claude Code">
   <defs>
     <style>
       .bg { fill: #08100f; }
@@ -29,6 +29,6 @@
     </g>
   </g>
 
-  <text class="word" x="290" y="160">claudelens</text>
+  <text class="word" x="290" y="160">tarsa</text>
   <text class="tag"  x="292" y="200">live observability for claude code</text>
 </svg>

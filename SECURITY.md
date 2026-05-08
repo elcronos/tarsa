@@ -1,8 +1,8 @@
-# ClaudeLens Security
+# Tarsa Security
 
 ## Threat model
 
-ClaudeLens is a **localhost-only** developer tool. It binds exclusively to
+Tarsa is a **localhost-only** developer tool. It binds exclusively to
 `127.0.0.1` and is not designed to be exposed to untrusted networks. The
 assumptions below hold only when that constraint is respected.
 
@@ -18,13 +18,13 @@ the port has full read access to your agent telemetry.
 
 ### No authentication
 
-ClaudeLens relies on OS-level loopback isolation rather than username/password
+Tarsa relies on OS-level loopback isolation rather than username/password
 or API-key authentication. This is intentional for a single-user CLI tool; it
 is not appropriate for shared or multi-tenant environments.
 
 ### JSONL event log (trust boundary)
 
-The event log at `~/.claudelens/events.jsonl` is created with mode **0600**
+The event log at `~/.tarsa/events.jsonl` is created with mode **0600**
 (owner-readable only). Anyone who can write to this file can inject arbitrary
 events into the dashboard. The default location restricts write access to the
 local user; do not change the permissions or move the file to a shared
@@ -74,6 +74,6 @@ browser tabs or HMR reconnection loops.
 
 ## Reporting security issues
 
-Please open an issue at **https://github.com/elcronos/claudelens** with the
+Please open an issue at **https://github.com/elcronos/tarsa** with the
 label `security`. For sensitive disclosures, email the repository maintainer
 directly before public disclosure.

@@ -1,9 +1,9 @@
-# ClaudeLens
+# Tarsa
 
 Live observability for Claude Code agent sessions. Topology, timeline, tool I/O, transcripts, cost — visible while the session runs.
 
 <p align="center">
-  <img src="docs/banner.svg" alt="ClaudeLens" width="720" />
+  <img src="docs/banner.svg" alt="Tarsa" width="720" />
 </p>
 
 <!-- TODO: add animated demo GIF below banner -->
@@ -15,17 +15,17 @@ Requires Node 20+ or Bun 1.x.
 **One-line install (clones, builds frontend, installs global):**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/elcronos/claudelens/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/elcronos/tarsa/main/install.sh | sh
 ```
 
-Source lives at `~/.claudelens-src`. Override with `CLAUDELENS_HOME=/custom/path`.
+Source lives at `~/.tarsa-src`. Override with `TARSA_HOME=/custom/path`.
 
 **Or zero-install run:**
 
 ```sh
-npx claudelens        # Node
+npx tarsa        # Node
 # or
-bunx claudelens       # Bun
+bunx tarsa       # Bun
 ```
 
 First run installs hooks into `~/.claude/settings.json` and opens `http://localhost:8100`. Start a Claude Code session in any project; agents appear in real time.
@@ -52,16 +52,16 @@ First run installs hooks into `~/.claude/settings.json` and opens `http://localh
 | `--allow-remote` | Enable remote access: binds to specified host, generates auth token, requires `Authorization: Bearer <token>` on all POST routes |
 | `--no-browser` | Skip auto-opening browser |
 | `--install-hooks` | Install hooks into `~/.claude/settings.json`, then exit |
-| `--uninstall` | Remove ClaudeLens hooks, then exit |
+| `--uninstall` | Remove Tarsa hooks, then exit |
 | `--append-event <name>` | Read JSON from stdin, write to event log (used by hook commands) |
 
-> **Remote mode:** When `--allow-remote` is set, a 32-byte hex token is written to `~/.claudelens/token` (mode `0600`) and the auto-opened browser URL includes `?token=<value>`. All POST endpoints require `Authorization: Bearer <token>`. In default localhost mode no token is generated and no auth middleware is registered.
+> **Remote mode:** When `--allow-remote` is set, a 32-byte hex token is written to `~/.tarsa/token` (mode `0600`) and the auto-opened browser URL includes `?token=<value>`. All POST endpoints require `Authorization: Bearer <token>`. In default localhost mode no token is generated and no auth middleware is registered.
 
 ## Architecture
 
 ```
 Claude Code hooks
-  → claudelens --append-event → /tmp/claudelens.jsonl
+  → tarsa --append-event → /tmp/tarsa.jsonl
         ↓ tail
   src/tailer.ts        adaptive-poll JSONL tailer
   src/processor.ts     append-only event log + structural-sharing reducer
@@ -76,27 +76,27 @@ Claude Code hooks
 ```
 
 State locations:
-- Event log: `/tmp/claudelens.jsonl`
-- DB: `~/.claudelens/history.db` (sessions, agents, tool_calls, events, baselines)
-- Hooks: `~/.claude/settings.json` (entries marked with `claudelens.jsonl`)
+- Event log: `/tmp/tarsa.jsonl`
+- DB: `~/.tarsa/history.db` (sessions, agents, tool_calls, events, baselines)
+- Hooks: `~/.claude/settings.json` (entries marked with `tarsa.jsonl`)
 
-## Why ClaudeLens
+## Why Tarsa
 
 **Q: I can already see what Claude Code is doing in my terminal. Why do I need this?**
 
-The terminal shows one agent's output. ClaudeLens shows the full picture: which subagents ran in parallel, which tools were called and how long they took, where cost accumulated, and whether any agent got stuck. For multi-agent sessions the terminal is unreadable; ClaudeLens is the only way to understand what actually happened.
+The terminal shows one agent's output. Tarsa shows the full picture: which subagents ran in parallel, which tools were called and how long they took, where cost accumulated, and whether any agent got stuck. For multi-agent sessions the terminal is unreadable; Tarsa is the only way to understand what actually happened.
 
 **Q: How is this different from ccusage or claude-trace?**
 
-`ccusage` aggregates token costs from transcript files after the fact. `claude-trace` captures HTTP traffic and shows raw API calls. ClaudeLens is real-time, hook-based, and focused on the agent graph rather than raw API calls or billing aggregates. It shows the DAG, the timeline, the tool I/O, and the cost — live, while the session runs.
+`ccusage` aggregates token costs from transcript files after the fact. `claude-trace` captures HTTP traffic and shows raw API calls. Tarsa is real-time, hook-based, and focused on the agent graph rather than raw API calls or billing aggregates. It shows the DAG, the timeline, the tool I/O, and the cost — live, while the session runs.
 
 **Q: Does it work with other AI coding tools?**
 
-No. ClaudeLens is Claude Code only. The hook system it relies on is specific to Claude Code. Supporting other tools is out of scope.
+No. Tarsa is Claude Code only. The hook system it relies on is specific to Claude Code. Supporting other tools is out of scope.
 
 **Q: Does it slow down my Claude Code sessions?**
 
-No. Hooks write a JSON line to `/tmp/claudelens.jsonl` and exit. The append is non-blocking and adds no latency to the agent session itself.
+No. Hooks write a JSON line to `/tmp/tarsa.jsonl` and exit. The append is non-blocking and adds no latency to the agent session itself.
 
 **Q: Is my data sent anywhere?**
 
@@ -104,7 +104,7 @@ No. Everything runs locally. The server binds `127.0.0.1` by default. No telemet
 
 ## Comparison
 
-| Feature | ClaudeLens | langfuse | agentops | ccusage | claude-trace | OTel |
+| Feature | Tarsa | langfuse | agentops | ccusage | claude-trace | OTel |
 |---|---|---|---|---|---|---|
 | Local-only | Yes | Optional | No | Yes | Yes | Configurable |
 | Hook-based (no proxy) | Yes | No | No | No | No | No |
@@ -137,8 +137,8 @@ No. Everything runs locally. The server binds `127.0.0.1` by default. No telemet
 ## Dev
 
 ```sh
-git clone https://github.com/elcronos/claudelens
-cd claudelens
+git clone https://github.com/elcronos/tarsa
+cd tarsa
 npm install
 npm run dev                       # vite dev server (proxies to :8100)
 npx vitest run                    # tests
@@ -157,7 +157,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide.
 
 ## Roadmap
 
-- **claudelens-shell** — a sister project for users who want an in-browser terminal. ClaudeLens itself will not embed a PTY (see [ADR-0004](docs/adr/0004-no-in-process-pty.md)); `claudelens-shell` will explore xterm.js + WebSocket relay as a separate, opt-in package.
+- **tarsa-shell** — a sister project for users who want an in-browser terminal. Tarsa itself will not embed a PTY (see [ADR-0004](docs/adr/0004-no-in-process-pty.md)); `tarsa-shell` will explore xterm.js + WebSocket relay as a separate, opt-in package.
 - Session sharing / export.
 - More baseline metrics (p95 tool latency, error rate by agent type).
 

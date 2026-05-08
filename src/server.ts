@@ -141,7 +141,7 @@ function broadcast(data: string): void {
         // already closed
       }
       toRemove.push(client);
-      process.stderr.write("[claudelens] SSE: slow client disconnected (buffer cap exceeded)\n");
+      process.stderr.write("[tarsa] SSE: slow client disconnected (buffer cap exceeded)\n");
       continue;
     }
     try {
@@ -246,8 +246,8 @@ export function createApp(opts: ServerOptions): Hono {
   app.get("/api/events/stream", (c) => {
     // MED-5: cap concurrent SSE connections
     if (clients.size >= MAX_SSE_CLIENTS) {
-      process.stderr.write("[claudelens] SSE: connection rejected (MAX_SSE_CLIENTS reached)\n");
-      return c.text("Too many connections. Restart claudelens or reduce browser tabs.", 429);
+      process.stderr.write("[tarsa] SSE: connection rejected (MAX_SSE_CLIENTS reached)\n");
+      return c.text("Too many connections. Restart tarsa or reduce browser tabs.", 429);
     }
 
     const lastEventId = c.req.header("Last-Event-ID");
@@ -370,7 +370,7 @@ export function createApp(opts: ServerOptions): Hono {
     try {
       db.setBudget(session_id, usd, kill_on_exceed === true ? 1 : 0);
     } catch (err) {
-      process.stderr.write(`[claudelens] setBudget error: ${String(err)}\n`);
+      process.stderr.write(`[tarsa] setBudget error: ${String(err)}\n`);
     }
 
     // Update in-memory session as well so the next event-driven budget
@@ -552,7 +552,7 @@ export function createApp(opts: ServerOptions): Hono {
       briefCache.set(id, brief);
       return c.json({ brief, source: "llm" });
     } catch (err) {
-      process.stderr.write(`[claudelens] brief error: ${String(err)}\n`);
+      process.stderr.write(`[tarsa] brief error: ${String(err)}\n`);
       return c.json({ brief: null, source: "error", error: String(err) });
     }
   });
@@ -676,7 +676,7 @@ export function createApp(opts: ServerOptions): Hono {
     }
 
     const id = crypto.randomBytes(4).toString("hex");
-    const sessionName = `claudelens-${id}`;
+    const sessionName = `tarsa-${id}`;
 
     try {
       await spawnTmuxSession(sessionName, cwd);
@@ -747,7 +747,7 @@ export function createApp(opts: ServerOptions): Hono {
 
     return new Response(
       `<html><body>
-        <h2>ClaudeLens</h2>
+        <h2>Tarsa</h2>
         <p>Frontend not built yet.</p>
         <p>API: <a href="/api/state">/api/state</a></p>
       </body></html>`,
@@ -793,7 +793,7 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
         broadcast(beMsg);
       }
     } catch (err) {
-      process.stderr.write(`[claudelens] budget detect error: ${String(err)}\n`);
+      process.stderr.write(`[tarsa] budget detect error: ${String(err)}\n`);
     }
   });
 

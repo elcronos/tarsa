@@ -1,16 +1,16 @@
 /**
- * Schema migrations for ClaudeLens SQLite database.
+ * Schema migrations for Tarsa SQLite database.
  *
  * Each migration has a version number and SQL to execute.
  * applyMigrations() checks schema_version and runs any missing migrations in order.
- * DB path: ~/.claudelens/history.db
+ * DB path: ~/.tarsa/history.db
  */
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-export const DB_DIR = path.join(os.homedir(), ".claudelens");
+export const DB_DIR = path.join(os.homedir(), ".tarsa");
 export const DB_PATH = path.join(DB_DIR, "history.db");
 
 export function ensureDbDir(): void {
@@ -150,7 +150,7 @@ COMMIT;`,
 ];
 
 /**
- * Copy a legacy AgentScope DB at ~/.agentscope/history.db into the ClaudeLens
+ * Copy a legacy AgentScope DB at ~/.agentscope/history.db into the Tarsa
  * DB path via SQLite VACUUM INTO if the new DB does not yet exist.
  *
  * VACUUM INTO does not support parameter binding for the destination filename,
@@ -163,7 +163,7 @@ COMMIT;`,
 export interface LegacyMigrateOpts {
   /** Override legacy path (testing only). Defaults to ~/.agentscope/history.db */
   legacyPath?: string;
-  /** Override new path (testing only). Defaults to ~/.claudelens/history.db */
+  /** Override new path (testing only). Defaults to ~/.tarsa/history.db */
   newPath?: string;
   /** Logger for the user-facing notice. Defaults to stderr. */
   log?: (msg: string) => void;
@@ -214,11 +214,11 @@ export async function migrateLegacyDbIfPresent(opts: LegacyMigrateOpts = {}): Pr
       db.close();
     }
   } catch (err) {
-    log(`[claudelens] Legacy DB migration failed: ${String(err)}`);
+    log(`[tarsa] Legacy DB migration failed: ${String(err)}`);
     return false;
   }
 
-  log(`[claudelens] Legacy DB at ${legacyPath} preserved. Delete with: rm -rf ${path.dirname(legacyPath)}`);
+  log(`[tarsa] Legacy DB at ${legacyPath} preserved. Delete with: rm -rf ${path.dirname(legacyPath)}`);
   return true;
 }
 

@@ -1,6 +1,6 @@
 /**
  * Migration v4 — verify VACUUM INTO copy of a legacy ~/.agentscope/history.db
- * into the new ClaudeLens DB path runs once and only when no new DB exists.
+ * into the new Tarsa DB path runs once and only when no new DB exists.
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
@@ -14,9 +14,9 @@ let legacyPath: string;
 let newPath: string;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudelens-mig4-"));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tarsa-mig4-"));
   legacyPath = path.join(tmpDir, "agentscope", "history.db");
-  newPath = path.join(tmpDir, "claudelens", "history.db");
+  newPath = path.join(tmpDir, "tarsa", "history.db");
   fs.mkdirSync(path.dirname(legacyPath), { recursive: true });
 });
 

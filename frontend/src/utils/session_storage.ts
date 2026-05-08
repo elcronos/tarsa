@@ -1,9 +1,9 @@
 /**
  * Utilities for persisting dismissed session IDs in localStorage.
- * Key: claudelens.dismissed_sessions (JSON array of string IDs)
+ * Key: tarsa.dismissed_sessions (JSON array of string IDs)
  */
 
-const STORAGE_KEY = "claudelens.dismissed_sessions";
+const STORAGE_KEY = "tarsa.dismissed_sessions";
 
 export function loadDismissed(): Set<string> {
   try {

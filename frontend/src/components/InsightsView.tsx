@@ -6,7 +6,7 @@ import EmptyState from "./EmptyState";
 import { getCsrfToken } from "../hooks/useAgentState";
 import { authHeaders } from "../utils/auth";
 
-const BUDGET_LS_PREFIX = "claudelens.budget.";
+const BUDGET_LS_PREFIX = "tarsa.budget.";
 
 function loadBudgetLS(sessionId: string): { budget_usd: number; kill_on_exceed: boolean } | null {
   try {

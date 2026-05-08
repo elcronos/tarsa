@@ -112,7 +112,7 @@ function SessionItem({
 
 // ── Project group header ──────────────────────────────────────────────────────
 
-const COLLAPSED_KEY = "claudelens.project-collapsed";
+const COLLAPSED_KEY = "tarsa.project-collapsed";
 
 function loadCollapsed(): Set<string> {
   try {
@@ -216,7 +216,7 @@ export default function Shell({
     ? (toolCalls.get(selectedAgent.id) ?? [])
     : [];
 
-  const SHOW_STALE_KEY = "claudelens.showStale";
+  const SHOW_STALE_KEY = "tarsa.showStale";
   const [showStale, setShowStale] = useState<boolean>(() => {
     try { return localStorage.getItem(SHOW_STALE_KEY) === "true"; } catch { return false; }
   });

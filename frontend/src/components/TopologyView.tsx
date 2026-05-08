@@ -24,7 +24,7 @@ import { isOrphanStub } from "../utils/orphan";
 import { useEffect } from "react";
 import StatusFilter, { type StatusFilterSet } from "./StatusFilter";
 
-const LEGEND_STORAGE_KEY = "claudelens.legendOpen";
+const LEGEND_STORAGE_KEY = "tarsa.legendOpen";
 
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 80;

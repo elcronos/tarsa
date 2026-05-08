@@ -1,7 +1,7 @@
 // toolSummary.ts — Rule-based plain-language summaries for tool calls.
 //
 // An optional PostToolUse hook calling an LLM could enrich tool calls with
-// summaries written to /tmp/claudelens.jsonl alongside tool_response.
+// summaries written to /tmp/tarsa.jsonl alongside tool_response.
 // Pros: high-quality natural language.
 // Cons: latency, cost, hook output may not be reliably captured.
 // For now use rule-based mapper above.

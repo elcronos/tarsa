@@ -1,4 +1,4 @@
-const STORAGE_KEY = "claudelens.token";
+const STORAGE_KEY = "tarsa.token";
 
 export function initAuthToken(): void {
   try {

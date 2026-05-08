@@ -12,7 +12,7 @@ let tmpDir: string;
 let dbPath: string;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudelens-mig5-"));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tarsa-mig5-"));
   dbPath = path.join(tmpDir, "history.db");
 });
 

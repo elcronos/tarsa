@@ -4,7 +4,7 @@
 
 ## Context
 
-ClaudeLens must display real-time agent state (topology, timeline, tool I/O) while also supporting time-travel replay. Two state management approaches were evaluated:
+Tarsa must display real-time agent state (topology, timeline, tool I/O) while also supporting time-travel replay. Two state management approaches were evaluated:
 
 1. **Mutable in-memory model:** Update agent/session records in place as events arrive.
 2. **Append-only event log + pure reducer:** Store raw events; derive all state by replaying events through a pure function.

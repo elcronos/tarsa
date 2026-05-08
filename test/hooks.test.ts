@@ -34,7 +34,7 @@ interface Settings {
 function makeHookCommand(event: string): string {
   // Mirror src/hooks.ts: command must contain the MARKER substring so the
   // installer recognizes its own entries.
-  return `claudelens --append-event ${event} 2>/dev/null || true`;
+  return `tarsa --append-event ${event} 2>/dev/null || true`;
 }
 
 function makeHookBlock(event: string): HookBlock {
@@ -104,7 +104,7 @@ let tmpDir: string;
 let settingsPath: string;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudelens-test-"));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tarsa-test-"));
   settingsPath = path.join(tmpDir, "settings.json");
 });
 
@@ -160,13 +160,13 @@ describe("installHooks", () => {
     );
     expect(agentpeekStillPresent).toBe(true);
 
-    // claudelens entry was added
-    const claudelensAdded = preToolBlocks.some((b: HookBlock) =>
+    // tarsa entry was added
+    const tarsaAdded = preToolBlocks.some((b: HookBlock) =>
       blockContainsMarker(b, MARKER)
     );
-    expect(claudelensAdded).toBe(true);
+    expect(tarsaAdded).toBe(true);
 
-    // exactly 2 blocks for PreToolUse (one agentpeek, one claudelens)
+    // exactly 2 blocks for PreToolUse (one agentpeek, one tarsa)
     expect(preToolBlocks.length).toBe(2);
   });
 
@@ -187,8 +187,8 @@ describe("installHooks", () => {
 });
 
 describe("uninstallHooks", () => {
-  it("removes only claudelens entries", () => {
-    // Pre-populate with both agentpeek and claudelens hooks
+  it("removes only tarsa entries", () => {
+    // Pre-populate with both agentpeek and tarsa hooks
     const initial: Settings = {
       hooks: {
         PreToolUse: [
@@ -218,7 +218,7 @@ describe("uninstallHooks", () => {
       blocks.some((b: HookBlock) => b.hooks.some((h) => h.command.includes("agentpeek.jsonl")))
     ).toBe(true);
 
-    // claudelens removed
+    // tarsa removed
     expect(blocks.some((b: HookBlock) => blockContainsMarker(b, MARKER))).toBe(false);
   });
 

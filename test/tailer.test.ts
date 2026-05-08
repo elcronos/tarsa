@@ -12,7 +12,7 @@ let tmpDir: string;
 let tmpFile: string;
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudelens-tailer-"));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tarsa-tailer-"));
   tmpFile = path.join(tmpDir, "test.jsonl");
 });
 

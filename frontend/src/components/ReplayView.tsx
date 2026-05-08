@@ -206,7 +206,7 @@ export default function ReplayView({
   const selectedRef = useRef<HTMLDivElement | null>(null);
 
   // ── Follow mode ─────────────────────────────────────────────────────────────
-  const FOLLOW_KEY = "claudelens.replay-follow";
+  const FOLLOW_KEY = "tarsa.replay-follow";
   const [follow, setFollow] = useState<boolean>(() => {
     try { return localStorage.getItem(FOLLOW_KEY) === "true"; } catch { return false; }
   });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ClaudeLens entry shim.
+ * Tarsa entry shim.
  *
  * On Bun: imports src/cli.ts directly (Bun natively runs TypeScript).
  * On Node: uses tsx/esm loader to transpile TypeScript on the fly.

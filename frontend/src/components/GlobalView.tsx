@@ -458,7 +458,7 @@ function SessionCard({
 
 // ── GlobalView ───────────────────────────────────────────────────────────────
 export default function GlobalView({ state, onSelectAgent, statusFilter, onStatusFilterChange, selectedAgentId }: GlobalViewProps) {
-  const SHOW_STALE_KEY = "claudelens.showStale";
+  const SHOW_STALE_KEY = "tarsa.showStale";
   const [showStale, setShowStale] = useState<boolean>(() => {
     try { return localStorage.getItem(SHOW_STALE_KEY) === "true"; } catch { return false; }
   });

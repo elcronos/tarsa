@@ -84,14 +84,14 @@ export class EventProcessor {
   ingest(raw: Record<string, unknown>): void {
     if (!isValidEventShape(raw)) {
       process.stderr.write(
-        `[claudelens] dropped invalid event shape: ${JSON.stringify(raw).slice(0, 200)}\n`
+        `[tarsa] dropped invalid event shape: ${JSON.stringify(raw).slice(0, 200)}\n`
       );
       return;
     }
     // When v2 lands, branch processing logic on schema_version here. See ADR-0002.
     if (raw["schema_version"] !== undefined && (raw["schema_version"] as number) > KNOWN_SCHEMA_VERSION) {
       process.stderr.write(
-        `[claudelens] Unknown schema_version ${String(raw["schema_version"])}, skipping event\n`
+        `[tarsa] Unknown schema_version ${String(raw["schema_version"])}, skipping event\n`
       );
       return;
     }
@@ -187,7 +187,7 @@ export class EventProcessor {
     try {
       updateBaselines(this._db, sessionState);
     } catch (err) {
-      process.stderr.write(`[claudelens] updateBaselines error: ${String(err)}\n`);
+      process.stderr.write(`[tarsa] updateBaselines error: ${String(err)}\n`);
     }
 
     // Persist the session row first so agents.session_id FK resolves.
@@ -196,21 +196,21 @@ export class EventProcessor {
       try {
         this._db.upsertSession(session);
       } catch (err) {
-        process.stderr.write(`[claudelens] upsertSession error: ${String(err)}\n`);
+        process.stderr.write(`[tarsa] upsertSession error: ${String(err)}\n`);
       }
     }
 
     // Persist iterations (Critic fix #11 / N6): only those clearing the
     // confidence + tool_count threshold get cross-restart history. Honor the
-    // CLAUDELENS_ITERATION_DETECTION=0 opt-out from --no-iteration-detection.
-    if (process.env["CLAUDELENS_ITERATION_DETECTION"] !== "0") {
+    // TARSA_ITERATION_DETECTION=0 opt-out from --no-iteration-detection.
+    if (process.env["TARSA_ITERATION_DETECTION"] !== "0") {
       const iters = this._state.iterations.get(sessionId) ?? [];
       for (const it of iters) {
         if (it.confidence >= 0.85 && it.tool_count >= 3) {
           try {
             this._db.upsertIteration(sessionId, it);
           } catch (err) {
-            process.stderr.write(`[claudelens] upsertIteration error: ${String(err)}\n`);
+            process.stderr.write(`[tarsa] upsertIteration error: ${String(err)}\n`);
           }
         }
       }
@@ -260,14 +260,14 @@ export class EventProcessor {
           updates.anomaly_score = score.healthScore;
         }
       } catch (err) {
-        process.stderr.write(`[claudelens] scoreAgent error: ${String(err)}\n`);
+        process.stderr.write(`[tarsa] scoreAgent error: ${String(err)}\n`);
       }
 
       // Always upsert so child agents' parent_id FK resolves.
       try {
         this._db.upsertAgent({ ...agent, ...updates });
       } catch (err) {
-        process.stderr.write(`[claudelens] upsertAgent error: ${String(err)}\n`);
+        process.stderr.write(`[tarsa] upsertAgent error: ${String(err)}\n`);
       }
     }
   }
@@ -277,7 +277,7 @@ export class EventProcessor {
       try {
         fn(event, state);
       } catch (err) {
-        process.stderr.write(`[claudelens] subscriber error: ${String(err)}\n`);
+        process.stderr.write(`[tarsa] subscriber error: ${String(err)}\n`);
       }
     }
   }

@@ -4,7 +4,7 @@
 
 ## Context
 
-When `--allow-remote` is set, ClaudeLens's mutating endpoints are reachable from any network interface. Without authentication, any machine that can reach the server can wipe state, manipulate budgets, or spawn processes. An authentication mechanism is needed that:
+When `--allow-remote` is set, Tarsa's mutating endpoints are reachable from any network interface. Without authentication, any machine that can reach the server can wipe state, manipulate budgets, or spawn processes. An authentication mechanism is needed that:
 
 - Adds zero overhead when not in remote mode.
 - Requires no interactive setup (passwords, OAuth flows).
@@ -17,8 +17,8 @@ Jupyter Notebook uses a file-based token delivered via URL query parameter (`?to
 When `--allow-remote` is active:
 
 1. On startup, generate a 32-byte cryptographically random hex token.
-2. Write the token to `~/.claudelens/token` with permissions `0o600`.
-3. Log the token file path to stderr: `[claudelens] Auth token: ~/.claudelens/token`.
+2. Write the token to `~/.tarsa/token` with permissions `0o600`.
+3. Log the token file path to stderr: `[tarsa] Auth token: ~/.tarsa/token`.
 4. The auto-opened browser URL includes `?token=<value>` as a query parameter.
 5. The frontend reads the token from `window.location.search` on first load, stores it in `sessionStorage`, and attaches it as `Authorization: Bearer <token>` on all POST requests.
 6. All POST routes require a valid `Authorization: Bearer <token>` header; missing or wrong token returns 401.

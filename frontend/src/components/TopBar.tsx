@@ -88,7 +88,7 @@ function StatusPill({
   );
 }
 
-const PROJECT_FILTER_KEY = "claudelens.project-filter";
+const PROJECT_FILTER_KEY = "tarsa.project-filter";
 
 export function loadProjectFilter(): string | null {
   try {
@@ -217,7 +217,7 @@ export default function TopBar({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `claudelens-${selectedSessionId}.json`;
+      a.download = `tarsa-${selectedSessionId}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch {
@@ -231,7 +231,7 @@ export default function TopBar({
       <div className="flex items-center gap-1.5 shrink-0">
         <img src={logoUrl} alt="" className="h-5 w-5" />
         <span className="font-mono text-xs font-semibold text-[var(--accent)] tracking-tight">
-          claudelens
+          tarsa
         </span>
       </div>
 

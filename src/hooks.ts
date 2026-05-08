@@ -1,5 +1,5 @@
 /**
- * Install / uninstall ClaudeLens hooks in ~/.claude/settings.json.
+ * Install / uninstall Tarsa hooks in ~/.claude/settings.json.
  *
  * Hook structure mirrors agentpeek's proven shape:
  *   settings.hooks[event] = [{ hooks: [{ type, command, async }] }, ...]
@@ -12,11 +12,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Substring uniquely identifying a ClaudeLens hook command. Must match the
+// Substring uniquely identifying a Tarsa hook command. Must match the
 // command produced by makeHookCommand below; agentpeek and other tools must
 // not produce a command containing this exact substring.
-export const MARKER = "claudelens --append-event";
-export const JSONL_PATH = path.join(os.homedir(), ".claudelens", "events.jsonl");
+export const MARKER = "tarsa --append-event";
+export const JSONL_PATH = path.join(os.homedir(), ".tarsa", "events.jsonl");
 export const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 
 export const HOOK_EVENTS = [
@@ -46,10 +46,10 @@ interface HooksSettings {
 }
 
 function makeHookCommand(event: string): string {
-  // Delegate write to `claudelens --append-event` so a single fs.writeSync call
+  // Delegate write to `tarsa --append-event` so a single fs.writeSync call
   // performs the append. Inline jq + shell `>>` interleaves under load when
   // payloads exceed PIPE_BUF (~4KB on macOS), corrupting JSONL.
-  return `claudelens --append-event ${event} 2>/dev/null || true`;
+  return `tarsa --append-event ${event} 2>/dev/null || true`;
 }
 
 function makeHookBlock(event: string): HookBlock {
@@ -86,7 +86,7 @@ function blockContainsMarker(block: HookBlock, marker: string): boolean {
 }
 
 /**
- * Install ClaudeLens hooks into ~/.claude/settings.json.
+ * Install Tarsa hooks into ~/.claude/settings.json.
  * Idempotent — running twice produces identical output.
  * Never modifies entries that contain "agentpeek.jsonl".
  * Returns true if any changes were written.
@@ -120,8 +120,8 @@ export function installHooks(): boolean {
 }
 
 /**
- * Remove ClaudeLens hooks from ~/.claude/settings.json.
- * Only removes entries whose command contains "claudelens.jsonl".
+ * Remove Tarsa hooks from ~/.claude/settings.json.
+ * Only removes entries whose command contains "tarsa.jsonl".
  * Returns true if any changes were written.
  */
 export function uninstallHooks(): boolean {
@@ -159,7 +159,7 @@ export function uninstallHooks(): boolean {
 
 /**
  * Additively patch the user's settings.json with any HOOK_EVENTS missing a
- * ClaudeLens entry. Identical to installHooks() — kept as an explicit name
+ * Tarsa entry. Identical to installHooks() — kept as an explicit name
  * for the --upgrade-hooks CLI path so users understand it modifies an
  * existing install rather than performing a fresh install.
  *
@@ -186,7 +186,7 @@ export function upgradeHooks(): string[] {
 }
 
 /**
- * Returns true if all HOOK_EVENTS have at least one ClaudeLens entry installed.
+ * Returns true if all HOOK_EVENTS have at least one Tarsa entry installed.
  */
 export function hooksInstalled(): boolean {
   const settings = readSettings();

@@ -4,7 +4,7 @@
 
 ## Context
 
-ClaudeLens binds its HTTP server on `:8100`. The bind address and authentication posture determine the attack surface for the mutating endpoints (`POST /api/reset`, `POST /api/budget`, `POST /api/spawn`).
+Tarsa binds its HTTP server on `:8100`. The bind address and authentication posture determine the attack surface for the mutating endpoints (`POST /api/reset`, `POST /api/budget`, `POST /api/spawn`).
 
 Two postures were evaluated:
 
@@ -28,4 +28,4 @@ See ADR-0005 for the token delivery mechanism used in remote mode.
 
 **Negative:**
 - Any process running as the same local user can still reach `127.0.0.1:8100` in default mode. This is an accepted risk for a single-user dev tool.
-- Remote mode users must manage the token file (`~/.claudelens/token`) and pass it in scripts that call POST endpoints.
+- Remote mode users must manage the token file (`~/.tarsa/token`) and pass it in scripts that call POST endpoints.

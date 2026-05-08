@@ -182,7 +182,7 @@ export default function App() {
       return session.budget_usd;
     }
     try {
-      const raw = localStorage.getItem(`claudelens.budget.${selectedSessionId}`);
+      const raw = localStorage.getItem(`tarsa.budget.${selectedSessionId}`);
       if (raw) {
         const parsed = JSON.parse(raw) as { budget_usd?: number };
         if (typeof parsed.budget_usd === "number" && parsed.budget_usd > 0) {

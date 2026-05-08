@@ -1,7 +1,7 @@
 /**
  * Hook installer upgrade path — additively patches an existing settings.json
  * with HOOK_EVENTS entries the user is missing, without duplicating or
- * stripping non-ClaudeLens entries.
+ * stripping non-Tarsa entries.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
@@ -14,7 +14,7 @@ let MARKER: string;
 let HOOK_EVENTS: readonly string[];
 
 beforeEach(async () => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "claudelens-upg-"));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tarsa-upg-"));
   settingsPath = path.join(tmpDir, "settings.json");
   // Mock the SETTINGS_PATH the hooks module reads. We do this by
   // re-importing the module with a path patch via vi.mock-equivalent: simply
@@ -56,7 +56,7 @@ function upgradeHooksAt(): string[] {
     s.hooks[e] = blocks;
     if (!blocks.some(blockHasMarker)) {
       blocks.push({
-        hooks: [{ type: "command", command: `claudelens --append-event ${e} 2>/dev/null || true`, async: true }],
+        hooks: [{ type: "command", command: `tarsa --append-event ${e} 2>/dev/null || true`, async: true }],
       });
       added.push(e);
     }
@@ -72,7 +72,7 @@ describe("upgradeHooks (additive patch)", () => {
         PreToolUse: [
           {
             hooks: [
-              { type: "command", command: `claudelens --append-event PreToolUse`, async: true },
+              { type: "command", command: `tarsa --append-event PreToolUse`, async: true },
             ],
           },
         ],
@@ -118,7 +118,7 @@ describe("upgradeHooks (additive patch)", () => {
     expect(
       blocks.some((b) => b.hooks.some((h) => h.command.includes("/tmp/mine.log")))
     ).toBe(true);
-    // A claudelens entry must have been added alongside it
+    // A tarsa entry must have been added alongside it
     expect(blocks.some(blockHasMarker)).toBe(true);
   });
 
