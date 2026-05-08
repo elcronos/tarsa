@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tarsa — live observability for Claude Code</title>
+  <meta name="description" content="Tarsa gives you live observability for Claude Code: topology DAG, timeline replay, cost provenance, stuck detection, and session diff — all local, no signup, zero instrumentation." />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Tarsa — live observability for Claude Code" />
+  <meta property="og:description" content="Hook-based, local-first observability for Claude Code. Time-travel replay, real-time DAG, cost provenance — no SDK, no cloud, no signup." />
+  <meta property="og:image" content="./og-card.svg" />
+  <meta property="og:url" content="https://elcronos.github.io/tarsa/" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Tarsa — live observability for Claude Code" />
+  <meta name="twitter:description" content="Hook-based, local-first observability for Claude Code. Time-travel replay, real-time DAG, cost provenance — no SDK, no cloud, no signup." />
+  <meta name="twitter:image" content="./og-card.svg" />
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="./logo.svg" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&amp;display=swap" />
+
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+
+  <!-- ===== HEADER ===== -->
+  <header>
+    <div class="container header-inner">
+      <a href="/" class="logo-link">
+        <img src="./logo.svg" alt="Tarsa logo" width="32" height="32" />
+        Tarsa
+      </a>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ===== HERO ===== -->
+    <section class="hero" aria-labelledby="hero-heading">
+      <div class="container">
+        <img
+          src="./banner.svg"
+          alt="Tarsa dashboard showing a live multi-agent graph and timeline for a Claude Code session"
+          class="hero-banner"
+          width="720"
+          height="360"
+        />
+        <h1 id="hero-heading" class="hero-headline">Live observability for Claude Code</h1>
+        <div class="hero-pitch">
+          <ul>
+            <li>See every agent, tool call, and token — as it happens</li>
+            <li>Replay any session deterministically with a drag of the scrubber</li>
+            <li>Zero instrumentation: drop a hook, run a command, done</li>
+          </ul>
+        </div>
+        <div class="pre-wrap install-snippet" title="One-line install">
+          <pre><code>curl -fsSL https://raw.githubusercontent.com/elcronos/tarsa/main/install.sh | sh</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== NOVEL PROPOSITION ===== -->
+    <section id="novel" aria-labelledby="novel-heading">
+      <div class="container">
+        <h2 id="novel-heading" class="section-heading">The only tool that combines all five.</h2>
+        <p class="section-sub">Each differentiator matters. Tarsa is the only tool that delivers all of them together.</p>
+
+        <div class="differentiators-grid">
+          <div class="diff-card">
+            <h3 class="diff-card-title">Zero-instrument</h3>
+            <p>Hook-based capture with no SDK to install, no proxy to route traffic through, and no MITM layer. Paste one block into your hooks config and you are done.</p>
+          </div>
+          <div class="diff-card">
+            <h3 class="diff-card-title">Time-travel replay</h3>
+            <p>State is derived by running a pure reducer over an append-only event log. Replay to any timestamp deterministically — no snapshots, no guesswork.</p>
+          </div>
+          <div class="diff-card">
+            <h3 class="diff-card-title">Claude Code native</h3>
+            <p>Understands <code>subagent_type</code>, <code>team-*</code> agent markers, depth levels, and iteration counts. Built for Claude Code, not adapted from a generic tracer.</p>
+          </div>
+          <div class="diff-card">
+            <h3 class="diff-card-title">Local-first</h3>
+            <p>No cloud, no telemetry, no signup. A single binary writes to <code>/tmp/tarsa.jsonl</code> on your machine. Your data never leaves your terminal.</p>
+          </div>
+          <div class="diff-card">
+            <h3 class="diff-card-title">Real-time DAG</h3>
+            <p>A live directed-acyclic-graph of your agent topology, with subagent deduplication, color-coded edges, and depth-grid layout updating as events arrive.</p>
+          </div>
+        </div>
+
+        <p class="competitors-note">
+          langfuse needs an SDK. agentops is cloud. ccusage is post-hoc. claude-trace is HTTP-only. OTel is generic. Tarsa is none of the above.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== COMPARISON TABLE ===== -->
+    <section id="compare" aria-labelledby="compare-heading">
+      <div class="container">
+        <h2 id="compare-heading" class="section-heading">How Tarsa compares</h2>
+        <p class="section-sub">Feature-by-feature breakdown across popular observability tools for AI agents.</p>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Tool</th>
+                <th scope="col">Zero-instrument</th>
+                <th scope="col">Hook-based</th>
+                <th scope="col">Time-travel replay</th>
+                <th scope="col">Claude Code native</th>
+                <th scope="col">Local-only</th>
+                <th scope="col">Real-time graph</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="row-tarsa">
+                <td>Tarsa</td>
+                <td><span class="check" aria-label="yes">&#10003;</span></td>
+                <td><span class="check" aria-label="yes">&#10003;</span></td>
+                <td><span class="check" aria-label="yes">&#10003;</span></td>
+                <td><span class="check" aria-label="yes">&#10003;</span></td>
+                <td><span class="check" aria-label="yes">&#10003;</span></td>
+                <td><span class="check" aria-label="yes">&#10003;</span></td>
+              </tr>
+              <tr>
+                <td>langfuse</td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+              </tr>
+              <tr>
+                <td>agentops</td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+              </tr>
+              <tr>
+                <td>ccusage</td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+                <td><span class="check" aria-label="yes">&#10003;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+              </tr>
+              <tr>
+                <td>claude-trace</td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+                <td><span class="check" aria-label="yes">&#10003;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+              </tr>
+              <tr>
+                <td>OTel</td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="cross" aria-label="no">&#10007;</span></td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+                <td><span class="partial" aria-label="partial">~</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== FEATURES ===== -->
+    <section id="features" aria-labelledby="features-heading">
+      <div class="container">
+        <h2 id="features-heading" class="section-heading">Features</h2>
+        <p class="section-sub">Everything you need to understand a multi-agent Claude Code session.</p>
+
+        <div class="features-grid">
+          <div class="feature-card">
+            <h3>Topology DAG</h3>
+            <p>Directed-acyclic-graph of all agents with depth-grid layout. Color-coded edges distinguish subagent spawns from tool calls, updated live as events stream in.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Timeline Gantt</h3>
+            <p>Parallel-bar grouping with depth indentation shows which agents ran concurrently. Mini-map overview lets you orient quickly across long sessions.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Replay Scrubber</h3>
+            <p>Drag through history to reconstruct exact agent state at any moment. Deterministic state derivation via pure reducer. Full keyboard navigation supported.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Cost Provenance</h3>
+            <p>Per-agent token and cost breakdown with measured-vs-estimated badges. Trace spend back to the exact subagent that incurred it.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Stuck Detection</h3>
+            <p>Agent-type baselines and z-score analysis surface agents that have stalled. Root-cause hints point to the last tool call or pattern that preceded the hang.</p>
+          </div>
+          <div class="feature-card">
+            <h3>Session Diff</h3>
+            <p>Side-by-side comparison of two sessions. Identify regressions, improvements, or behavioral drift between runs on the same prompt.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== INSTALL ===== -->
+    <section id="install" aria-labelledby="install-heading">
+      <div class="container">
+        <h2 id="install-heading" class="section-heading">Install</h2>
+        <p class="section-sub">Choose the method that fits your runtime. All three start the same local server on port 8100.</p>
+
+        <div class="install-methods">
+          <div class="install-method">
+            <h3>One-line installer</h3>
+            <div class="pre-wrap">
+              <pre><code>curl -fsSL https://raw.githubusercontent.com/elcronos/tarsa/main/install.sh | sh</code></pre>
+            </div>
+          </div>
+          <div class="install-method">
+            <h3>Node (npx)</h3>
+            <div class="pre-wrap">
+              <pre><code>npx tarsa</code></pre>
+            </div>
+          </div>
+          <div class="install-method">
+            <h3>Bun (bunx)</h3>
+            <div class="pre-wrap">
+              <pre><code>bunx tarsa</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== ARCHITECTURE ===== -->
+    <section id="architecture" aria-labelledby="arch-heading">
+      <div class="container">
+        <h2 id="arch-heading" class="section-heading">How it works</h2>
+        <p class="section-sub">A straight pipeline from Claude Code hooks to the browser dashboard — no intermediaries.</p>
+
+        <div class="arch-diagram" role="img" aria-label="Architecture diagram showing data flow from Claude Code hooks through JSONL log, tailer, processor, server, to frontend">
+<span class="arch-node">Claude Code hooks</span>
+<span class="arch-arrow">&#8595;</span>
+<span class="arch-node">/tmp/tarsa.jsonl</span>  <span class="arch-label">(append-only event log)</span>
+<span class="arch-arrow">&#8595;</span>
+<span class="arch-node">src/tailer.ts</span>  <span class="arch-label">(adaptive-poll JSONL tailer)</span>
+<span class="arch-arrow">&#8595;</span>
+<span class="arch-node">src/processor.ts</span>  <span class="arch-label">(pure reducer, structural sharing)</span>
+<span class="arch-arrow">&#8595;</span>
+<span class="arch-node">src/server.ts</span>  <span class="arch-label">(Hono REST + SSE on :8100)</span>
+<span class="arch-arrow">&#8595;</span>
+<span class="arch-node">frontend/</span>  <span class="arch-label">(React + Vite, single-page dashboard)</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer>
+    <div class="container footer-inner">
+      <div class="footer-links">
+        <a href="https://github.com/elcronos/tarsa" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/elcronos/tarsa/blob/main/LICENSE" class="mit-badge" rel="noopener noreferrer">
+          MIT License
+        </a>
+      </div>
+      <p class="footer-disclaimer">
+        Claude and Claude Code are trademarks of Anthropic. This project is not affiliated with or endorsed by Anthropic.
+      </p>
+    </div>
+  </footer>
+
+  <!-- Copy-to-clipboard (progressive enhancement) -->
+  <script>
+    document.querySelectorAll('.pre-wrap').forEach(function(wrap) {
+      var pre = wrap.querySelector('pre');
+      if (!pre) return;
+      var btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.textContent = 'copy';
+      btn.setAttribute('aria-label', 'Copy code to clipboard');
+      btn.addEventListener('click', function() {
+        var text = pre.querySelector('code') ? pre.querySelector('code').textContent : pre.textContent;
+        navigator.clipboard.writeText(text.trim()).then(function() {
+          btn.textContent = 'copied!';
+          setTimeout(function() { btn.textContent = 'copy'; }, 2000);
+        });
+      });
+      wrap.appendChild(btn);
+    });
+  </script>
+
+</body>
+</html>
