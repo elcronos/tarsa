@@ -7,6 +7,7 @@ import JsonView, { tryParseJson } from "./JsonView";
 import Markdown, { looksLikeMarkdown } from "./Markdown";
 import { summarizeTool } from "../utils/toolSummary";
 import { extractBrief } from "../utils/promptBrief";
+import { parseSlashCommand } from "../utils/slashCommand";
 import { isTeamWorker } from "../utils/team";
 import { relativeTime } from "../utils/relativeTime";
 import LoadingDots from "./LoadingDots";
@@ -1064,7 +1065,10 @@ function PromptTab({ agent }: { agent: Agent }) {
     );
   }
 
-  const regexBrief = extractBrief(text);
+  const slash = parseSlashCommand(text);
+  // Body shown below the slash-command card (if any). Falls back to full text.
+  const bodyText = slash ? slash.rest : text;
+  const regexBrief = bodyText ? extractBrief(bodyText) : "";
 
   // source labels — make clear what the user is looking at
   const sourceMeta: Record<string, { label: string; tone: string }> = {
@@ -1075,13 +1079,12 @@ function PromptTab({ agent }: { agent: Agent }) {
   };
   const meta = sourceMeta[source];
 
-  // Warn when transcript fallback was used for a team worker — that text is
-  // usually the parent's slash-command, identical across all workers.
   const transcriptFallbackOnTeam = isTeam && source === "transcript";
 
   return (
     <div className="space-y-2">
-      <BriefCard agentId={agent.id} fallback={regexBrief} />
+      {slash && <SlashCommandCard name={slash.name} args={slash.args} />}
+      {regexBrief && <BriefCard agentId={agent.id} fallback={regexBrief} />}
       {meta && (
         <div className={`text-[10px] font-mono ${meta.tone}`}>{meta.label}</div>
       )}
@@ -1091,7 +1094,29 @@ function PromptTab({ agent }: { agent: Agent }) {
           this is usually the parent's slash command and identical across workers.
         </div>
       )}
-      <ExpandableBlock content={text} collapseThreshold={500} defaultExpanded />
+      {bodyText && (
+        <ExpandableBlock content={bodyText} collapseThreshold={500} defaultExpanded />
+      )}
+    </div>
+  );
+}
+
+function SlashCommandCard({ name, args }: { name: string; args: string }) {
+  return (
+    <div className="rounded border border-violet-500/30 px-3 py-2 bg-violet-500/5">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-[9px] font-mono text-violet-400 uppercase tracking-wider">
+          slash command
+        </span>
+      </div>
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <code className="text-[13px] font-mono text-violet-200">/{name}</code>
+        {args && (
+          <code className="text-[11px] font-mono text-[var(--fg-muted)] bg-[var(--bg)] rounded px-1.5 py-0.5">
+            {args}
+          </code>
+        )}
+      </div>
     </div>
   );
 }
