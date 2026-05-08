@@ -51,8 +51,7 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build
+      - name: Build (validates bun:sqlite import path)
         run: bun run build
-
-      - name: Run tests
-        run: bun test
+      # No `bun test`: tests use better-sqlite3 directly (Node-only native).
+      # The Bun lane only validates that the Bun runtime imports/builds cleanly.
