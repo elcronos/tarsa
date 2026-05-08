@@ -25,246 +25,372 @@
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&amp;display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&display=swap" />
 
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
 
-  <!-- ===== HEADER ===== -->
-  <header>
-    <div class="container header-inner">
-      <a href="/" class="logo-link">
-        <img src="./logo.svg" alt="Tarsa logo" width="32" height="32" />
-        Tarsa
+  <!-- ===== STICKY NAV ===== -->
+  <nav class="sticky-nav" aria-label="Site navigation">
+    <div class="nav-inner">
+      <a href="/" class="nav-logo" aria-label="Tarsa home">
+        <img src="./logo.svg" alt="" width="24" height="24" aria-hidden="true" />
+        <span>Tarsa</span>
       </a>
+      <ul class="nav-links" role="list">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#compare">Compare</a></li>
+        <li><a href="https://github.com/elcronos/tarsa" class="nav-github" rel="noopener noreferrer" aria-label="GitHub repository">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+          <span>GitHub</span>
+        </a></li>
+      </ul>
     </div>
-  </header>
+  </nav>
 
   <main>
 
     <!-- ===== HERO ===== -->
     <section class="hero" aria-labelledby="hero-heading">
-      <div class="container">
-        <img
-          src="./banner.svg"
-          alt="Tarsa dashboard showing a live multi-agent graph and timeline for a Claude Code session"
-          class="hero-banner"
-          width="720"
-          height="360"
-        />
-        <h1 id="hero-heading" class="hero-headline">Live observability for Claude Code</h1>
-        <div class="hero-pitch">
-          <ul>
-            <li>See every agent, tool call, and token — as it happens</li>
-            <li>Replay any session deterministically with a drag of the scrubber</li>
-            <li>Zero instrumentation: drop a hook, run a command, done</li>
-          </ul>
+      <div class="hero-backdrop" aria-hidden="true"></div>
+      <div class="container hero-content">
+        <p class="hero-eyebrow" aria-label="Version 0.4, MIT license, Claude Code">
+          <span>v0.4</span>
+          <span class="eyebrow-dot" aria-hidden="true">·</span>
+          <span>MIT</span>
+          <span class="eyebrow-dot" aria-hidden="true">·</span>
+          <span>Claude Code</span>
+        </p>
+        <h1 id="hero-heading" class="hero-headline">
+          Live observability<br>for <span class="headline-accent">Claude Code</span>
+        </h1>
+        <p class="hero-sub">
+          See every agent, tool call, and token as it happens.<br>
+          Replay sessions deterministically. Zero instrumentation.
+        </p>
+        <div class="hero-cta">
+          <a href="#install" class="btn-primary">Get Started</a>
+          <a href="https://github.com/elcronos/tarsa" class="btn-ghost" rel="noopener noreferrer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+            View on GitHub
+          </a>
         </div>
-        <div class="pre-wrap install-snippet" title="One-line install">
-          <pre><code>curl -fsSL https://raw.githubusercontent.com/elcronos/tarsa/main/install.sh | sh</code></pre>
+        <div class="hero-banner-wrap">
+          <img
+            src="./banner.svg"
+            alt="Tarsa dashboard showing a live multi-agent graph and timeline for a Claude Code session"
+            class="hero-banner"
+            width="1040"
+            height="520"
+          />
         </div>
       </div>
     </section>
 
     <!-- ===== NOVEL PROPOSITION ===== -->
-    <section id="novel" aria-labelledby="novel-heading">
+    <section id="novel" class="section-surface" aria-labelledby="novel-heading">
       <div class="container">
-        <h2 id="novel-heading" class="section-heading">The only tool that combines all five.</h2>
-        <p class="section-sub">Each differentiator matters. Tarsa is the only tool that delivers all of them together.</p>
-
-        <div class="differentiators-grid">
-          <div class="diff-card">
-            <h3 class="diff-card-title">Zero-instrument</h3>
-            <p>Hook-based capture with no SDK to install, no proxy to route traffic through, and no MITM layer. Paste one block into your hooks config and you are done.</p>
-          </div>
-          <div class="diff-card">
-            <h3 class="diff-card-title">Time-travel replay</h3>
-            <p>State is derived by running a pure reducer over an append-only event log. Replay to any timestamp deterministically — no snapshots, no guesswork.</p>
-          </div>
-          <div class="diff-card">
-            <h3 class="diff-card-title">Claude Code native</h3>
-            <p>Understands <code>subagent_type</code>, <code>team-*</code> agent markers, depth levels, and iteration counts. Built for Claude Code, not adapted from a generic tracer.</p>
-          </div>
-          <div class="diff-card">
-            <h3 class="diff-card-title">Local-first</h3>
-            <p>No cloud, no telemetry, no signup. A single binary writes to <code>/tmp/tarsa.jsonl</code> on your machine. Your data never leaves your terminal.</p>
-          </div>
-          <div class="diff-card">
-            <h3 class="diff-card-title">Real-time DAG</h3>
-            <p>A live directed-acyclic-graph of your agent topology, with subagent deduplication, color-coded edges, and depth-grid layout updating as events arrive.</p>
-          </div>
+        <div class="section-header">
+          <h2 id="novel-heading" class="section-heading">Five things no other<br>tool does together</h2>
         </div>
 
-        <p class="competitors-note">
-          langfuse needs an SDK. agentops is cloud. ccusage is post-hoc. claude-trace is HTTP-only. OTel is generic. Tarsa is none of the above.
-        </p>
+        <div class="diff-grid">
+          <article class="diff-card">
+            <span class="diff-num" aria-hidden="true">01</span>
+            <h3 class="diff-title">Zero instrumentation</h3>
+            <p class="diff-desc">Hook-based capture. No SDK, no proxy, no MITM layer.</p>
+          </article>
+          <article class="diff-card">
+            <span class="diff-num" aria-hidden="true">02</span>
+            <h3 class="diff-title">Time-travel replay</h3>
+            <p class="diff-desc">Pure reducer over append-only log. Deterministic at any timestamp.</p>
+          </article>
+          <article class="diff-card">
+            <span class="diff-num" aria-hidden="true">03</span>
+            <h3 class="diff-title">Claude Code native</h3>
+            <p class="diff-desc">Understands subagent types, team markers, depth levels, and iteration counts.</p>
+          </article>
+          <article class="diff-card">
+            <span class="diff-num" aria-hidden="true">04</span>
+            <h3 class="diff-title">Local-first</h3>
+            <p class="diff-desc">Single binary, writes to /tmp. Your data never leaves your machine.</p>
+          </article>
+          <article class="diff-card">
+            <span class="diff-num" aria-hidden="true">05</span>
+            <h3 class="diff-title">Real-time DAG</h3>
+            <p class="diff-desc">Live directed-acyclic-graph with depth-grid layout, updated as events arrive.</p>
+          </article>
+        </div>
+
+        <p class="novel-tagline">No SDK. No proxy. No cloud. No setup.</p>
       </div>
     </section>
 
     <!-- ===== COMPARISON TABLE ===== -->
-    <section id="compare" aria-labelledby="compare-heading">
+    <section id="compare" class="section-bg" aria-labelledby="compare-heading">
       <div class="container">
-        <h2 id="compare-heading" class="section-heading">How Tarsa compares</h2>
-        <p class="section-sub">Feature-by-feature breakdown across popular observability tools for AI agents.</p>
+        <div class="section-header">
+          <h2 id="compare-heading" class="section-heading">How Tarsa compares</h2>
+          <p class="section-sub">Feature-by-feature breakdown across popular observability tools for AI agents.</p>
+        </div>
 
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Tool</th>
-                <th scope="col">Zero-instrument</th>
-                <th scope="col">Hook-based</th>
-                <th scope="col">Time-travel replay</th>
-                <th scope="col">Claude Code native</th>
-                <th scope="col">Local-only</th>
-                <th scope="col">Real-time graph</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="row-tarsa">
-                <td>Tarsa</td>
-                <td><span class="check" aria-label="yes">&#10003;</span></td>
-                <td><span class="check" aria-label="yes">&#10003;</span></td>
-                <td><span class="check" aria-label="yes">&#10003;</span></td>
-                <td><span class="check" aria-label="yes">&#10003;</span></td>
-                <td><span class="check" aria-label="yes">&#10003;</span></td>
-                <td><span class="check" aria-label="yes">&#10003;</span></td>
-              </tr>
-              <tr>
-                <td>langfuse</td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-              </tr>
-              <tr>
-                <td>agentops</td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-              </tr>
-              <tr>
-                <td>ccusage</td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-                <td><span class="check" aria-label="yes">&#10003;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-              </tr>
-              <tr>
-                <td>claude-trace</td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-                <td><span class="check" aria-label="yes">&#10003;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-              </tr>
-              <tr>
-                <td>OTel</td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="cross" aria-label="no">&#10007;</span></td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-                <td><span class="partial" aria-label="partial">~</span></td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="matrix-card">
+          <div class="matrix-scroll" role="region" aria-label="Feature comparison table" tabindex="0">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col" class="col-tool">Tool</th>
+                  <th scope="col">Zero-instrument</th>
+                  <th scope="col">Hook-based</th>
+                  <th scope="col">Time-travel</th>
+                  <th scope="col">Claude native</th>
+                  <th scope="col">Local-only</th>
+                  <th scope="col">Real-time graph</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="row-tarsa">
+                  <td class="col-tool">
+                    <span class="tool-name">Tarsa</span>
+                    <span class="winner-badge">winner</span>
+                  </td>
+                  <td><span class="dot dot-yes" aria-label="yes"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                  <td><span class="dot dot-yes" aria-label="yes"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                  <td><span class="dot dot-yes" aria-label="yes"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                  <td><span class="dot dot-yes" aria-label="yes"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                  <td><span class="dot dot-yes" aria-label="yes"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                  <td><span class="dot dot-yes" aria-label="yes"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                </tr>
+                <tr>
+                  <td class="col-tool"><span class="tool-name">langfuse</span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                </tr>
+                <tr>
+                  <td class="col-tool"><span class="tool-name">agentops</span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                </tr>
+                <tr>
+                  <td class="col-tool"><span class="tool-name">ccusage</span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-yes" aria-label="yes"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                </tr>
+                <tr>
+                  <td class="col-tool"><span class="tool-name">claude-trace</span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-yes" aria-label="yes"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                </tr>
+                <tr>
+                  <td class="col-tool"><span class="tool-name">OTel</span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-no" aria-label="no"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                  <td><span class="dot dot-partial" aria-label="partial"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="matrix-legend" aria-label="Legend">
+            <span class="legend-item"><span class="dot dot-yes" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".18"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span> Yes</span>
+            <span class="legend-item"><span class="dot dot-partial" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M5 8h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span> Partial</span>
+            <span class="legend-item"><span class="dot dot-no" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" fill="currentColor" opacity=".1"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span> No</span>
+          </div>
         </div>
       </div>
     </section>
 
     <!-- ===== FEATURES ===== -->
-    <section id="features" aria-labelledby="features-heading">
+    <section id="features" class="section-surface" aria-labelledby="features-heading">
       <div class="container">
-        <h2 id="features-heading" class="section-heading">Features</h2>
-        <p class="section-sub">Everything you need to understand a multi-agent Claude Code session.</p>
+        <div class="section-header">
+          <h2 id="features-heading" class="section-heading">Features</h2>
+          <p class="section-sub">Everything you need to understand a multi-agent Claude Code session.</p>
+        </div>
 
         <div class="features-grid">
-          <div class="feature-card">
-            <h3>Topology DAG</h3>
-            <p>Directed-acyclic-graph of all agents with depth-grid layout. Color-coded edges distinguish subagent spawns from tool calls, updated live as events stream in.</p>
-          </div>
-          <div class="feature-card">
-            <h3>Timeline Gantt</h3>
-            <p>Parallel-bar grouping with depth indentation shows which agents ran concurrently. Mini-map overview lets you orient quickly across long sessions.</p>
-          </div>
-          <div class="feature-card">
-            <h3>Replay Scrubber</h3>
-            <p>Drag through history to reconstruct exact agent state at any moment. Deterministic state derivation via pure reducer. Full keyboard navigation supported.</p>
-          </div>
-          <div class="feature-card">
-            <h3>Cost Provenance</h3>
-            <p>Per-agent token and cost breakdown with measured-vs-estimated badges. Trace spend back to the exact subagent that incurred it.</p>
-          </div>
-          <div class="feature-card">
-            <h3>Stuck Detection</h3>
-            <p>Agent-type baselines and z-score analysis surface agents that have stalled. Root-cause hints point to the last tool call or pattern that preceded the hang.</p>
-          </div>
-          <div class="feature-card">
-            <h3>Session Diff</h3>
-            <p>Side-by-side comparison of two sessions. Identify regressions, improvements, or behavioral drift between runs on the same prompt.</p>
-          </div>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">
+              <!-- DAG topology: dots connected by lines -->
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <circle cx="8" cy="8" r="3" fill="var(--accent)" opacity=".9"/>
+                <circle cx="24" cy="8" r="3" fill="var(--accent)" opacity=".6"/>
+                <circle cx="16" cy="24" r="3" fill="var(--accent)" opacity=".8"/>
+                <circle cx="8" cy="24" r="3" fill="var(--accent)" opacity=".5"/>
+                <line x1="8" y1="11" x2="16" y2="21" stroke="var(--accent)" stroke-width="1.5" opacity=".7"/>
+                <line x1="24" y1="11" x2="16" y2="21" stroke="var(--accent)" stroke-width="1.5" opacity=".5"/>
+                <line x1="8" y1="8" x2="21" y2="8" stroke="var(--accent)" stroke-width="1.5" opacity=".4"/>
+                <line x1="8" y1="11" x2="8" y2="21" stroke="var(--accent)" stroke-width="1.5" opacity=".35"/>
+              </svg>
+            </div>
+            <h3 class="feature-title">Topology DAG</h3>
+            <p class="feature-desc">Directed-acyclic-graph of all agents with depth-grid layout. Color-coded edges, updated live as events stream in.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">
+              <!-- Gantt bars -->
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <rect x="4" y="7" width="16" height="4" rx="2" fill="var(--accent)" opacity=".9"/>
+                <rect x="10" y="14" width="14" height="4" rx="2" fill="var(--accent)" opacity=".65"/>
+                <rect x="4" y="21" width="10" height="4" rx="2" fill="var(--accent)" opacity=".45"/>
+              </svg>
+            </div>
+            <h3 class="feature-title">Timeline Gantt</h3>
+            <p class="feature-desc">Parallel-bar grouping with depth indentation shows concurrent agents. Mini-map overview for long sessions.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">
+              <!-- Scrubber / playhead -->
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <rect x="4" y="15" width="24" height="2" rx="1" fill="var(--accent)" opacity=".3"/>
+                <rect x="4" y="15" width="13" height="2" rx="1" fill="var(--accent)" opacity=".9"/>
+                <circle cx="17" cy="16" r="4" fill="var(--accent)"/>
+                <circle cx="17" cy="16" r="2" fill="var(--bg)"/>
+                <path d="M12 8l-3 4 3 4" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/>
+                <path d="M20 8l3 4-3 4" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".6"/>
+              </svg>
+            </div>
+            <h3 class="feature-title">Replay Scrubber</h3>
+            <p class="feature-desc">Drag through history to reconstruct exact agent state at any moment. Deterministic via pure reducer.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">
+              <!-- Dollar / cost -->
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <text x="9" y="23" font-size="20" font-family="monospace" fill="var(--accent)" opacity=".9">$</text>
+                <path d="M22 10l2 2-8 8-4-4-2 2" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/>
+              </svg>
+            </div>
+            <h3 class="feature-title">Cost Provenance</h3>
+            <p class="feature-desc">Per-agent token and cost breakdown. Trace spend back to the exact subagent that incurred it.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">
+              <!-- Warning / stuck -->
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <path d="M16 5L28 26H4L16 5z" stroke="var(--accent)" stroke-width="1.8" stroke-linejoin="round" fill="none" opacity=".5"/>
+                <path d="M16 12v6" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" opacity=".9"/>
+                <circle cx="16" cy="22" r="1.2" fill="var(--accent)" opacity=".9"/>
+              </svg>
+            </div>
+            <h3 class="feature-title">Stuck Detection</h3>
+            <p class="feature-desc">Agent-type baselines and z-score analysis surface stalled agents. Root-cause hints included.</p>
+          </article>
+          <article class="feature-card">
+            <div class="feature-icon" aria-hidden="true">
+              <!-- Diff arrows -->
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <rect x="3" y="8" width="11" height="16" rx="2" stroke="var(--accent)" stroke-width="1.5" fill="none" opacity=".5"/>
+                <rect x="18" y="8" width="11" height="16" rx="2" stroke="var(--accent)" stroke-width="1.5" fill="none" opacity=".5"/>
+                <path d="M14 14l4 0M14 18l4 0" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" opacity=".9"/>
+                <path d="M16 13l2 1-2 1" stroke="var(--accent)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+                <path d="M16 17l-2 1 2 1" stroke="var(--accent)" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+              </svg>
+            </div>
+            <h3 class="feature-title">Session Diff</h3>
+            <p class="feature-desc">Side-by-side comparison of two sessions. Identify regressions, improvements, or behavioral drift.</p>
+          </article>
         </div>
       </div>
     </section>
 
     <!-- ===== INSTALL ===== -->
-    <section id="install" aria-labelledby="install-heading">
+    <section id="install" class="section-bg" aria-labelledby="install-heading">
       <div class="container">
-        <h2 id="install-heading" class="section-heading">Install</h2>
-        <p class="section-sub">Choose the method that fits your runtime. All three start the same local server on port 8100.</p>
+        <div class="section-header install-header">
+          <h2 id="install-heading" class="section-heading">One command.<br>Running in 30 seconds.</h2>
+        </div>
 
-        <div class="install-methods">
-          <div class="install-method">
-            <h3>One-line installer</h3>
-            <div class="pre-wrap">
-              <pre><code>curl -fsSL https://raw.githubusercontent.com/elcronos/tarsa/main/install.sh | sh</code></pre>
-            </div>
+        <div class="install-block">
+          <div class="install-pre-wrap pre-wrap">
+            <pre class="install-pre"><code>curl -fsSL https://raw.githubusercontent.com/elcronos/tarsa/main/install.sh | sh</code></pre>
           </div>
-          <div class="install-method">
-            <h3>Node (npx)</h3>
-            <div class="pre-wrap">
-              <pre><code>npx tarsa</code></pre>
-            </div>
-          </div>
-          <div class="install-method">
-            <h3>Bun (bunx)</h3>
-            <div class="pre-wrap">
-              <pre><code>bunx tarsa</code></pre>
-            </div>
-          </div>
+          <p class="install-caption">macOS &middot; Linux &middot; WSL2 &middot; ~30s install</p>
         </div>
       </div>
     </section>
 
     <!-- ===== ARCHITECTURE ===== -->
-    <section id="architecture" aria-labelledby="arch-heading">
+    <section id="architecture" class="section-surface" aria-labelledby="arch-heading">
       <div class="container">
-        <h2 id="arch-heading" class="section-heading">How it works</h2>
-        <p class="section-sub">A straight pipeline from Claude Code hooks to the browser dashboard — no intermediaries.</p>
+        <div class="section-header">
+          <h2 id="arch-heading" class="section-heading">How it works</h2>
+          <p class="section-sub">A straight pipeline from Claude Code hooks to your browser — no intermediaries.</p>
+        </div>
 
-        <div class="arch-diagram" role="img" aria-label="Architecture diagram showing data flow from Claude Code hooks through JSONL log, tailer, processor, server, to frontend">
-<span class="arch-node">Claude Code hooks</span>
-<span class="arch-arrow">&#8595;</span>
-<span class="arch-node">/tmp/tarsa.jsonl</span>  <span class="arch-label">(append-only event log)</span>
-<span class="arch-arrow">&#8595;</span>
-<span class="arch-node">src/tailer.ts</span>  <span class="arch-label">(adaptive-poll JSONL tailer)</span>
-<span class="arch-arrow">&#8595;</span>
-<span class="arch-node">src/processor.ts</span>  <span class="arch-label">(pure reducer, structural sharing)</span>
-<span class="arch-arrow">&#8595;</span>
-<span class="arch-node">src/server.ts</span>  <span class="arch-label">(Hono REST + SSE on :8100)</span>
-<span class="arch-arrow">&#8595;</span>
-<span class="arch-node">frontend/</span>  <span class="arch-label">(React + Vite, single-page dashboard)</span>
+        <div class="arch-flow" role="img" aria-label="Architecture flow: Claude Code hooks append to /tmp/tarsa.jsonl, tailer reads it, processor reduces state, server exposes REST and SSE on port 8100, frontend displays the dashboard">
+          <div class="arch-step">
+            <div class="arch-box">
+              <span class="arch-label-top">trigger</span>
+              <span class="arch-node-name">Claude Code hooks</span>
+            </div>
+          </div>
+          <div class="arch-connector" aria-hidden="true">
+            <svg viewBox="0 0 40 16" fill="none" preserveAspectRatio="none"><path d="M0 8h34M28 2l8 6-8 6" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="arch-step">
+            <div class="arch-box">
+              <span class="arch-label-top">event log</span>
+              <span class="arch-node-name">/tmp/tarsa.jsonl</span>
+            </div>
+          </div>
+          <div class="arch-connector" aria-hidden="true">
+            <svg viewBox="0 0 40 16" fill="none" preserveAspectRatio="none"><path d="M0 8h34M28 2l8 6-8 6" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="arch-step">
+            <div class="arch-box">
+              <span class="arch-label-top">tailer</span>
+              <span class="arch-node-name">src/tailer.ts</span>
+            </div>
+          </div>
+          <div class="arch-connector" aria-hidden="true">
+            <svg viewBox="0 0 40 16" fill="none" preserveAspectRatio="none"><path d="M0 8h34M28 2l8 6-8 6" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="arch-step">
+            <div class="arch-box">
+              <span class="arch-label-top">reducer</span>
+              <span class="arch-node-name">src/processor.ts</span>
+            </div>
+          </div>
+          <div class="arch-connector" aria-hidden="true">
+            <svg viewBox="0 0 40 16" fill="none" preserveAspectRatio="none"><path d="M0 8h34M28 2l8 6-8 6" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="arch-step">
+            <div class="arch-box">
+              <span class="arch-label-top">server :8100</span>
+              <span class="arch-node-name">src/server.ts</span>
+            </div>
+          </div>
+          <div class="arch-connector" aria-hidden="true">
+            <svg viewBox="0 0 40 16" fill="none" preserveAspectRatio="none"><path d="M0 8h34M28 2l8 6-8 6" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="arch-step arch-step-last">
+            <div class="arch-box arch-box-accent">
+              <span class="arch-label-top">dashboard</span>
+              <span class="arch-node-name">frontend/</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -274,19 +400,60 @@
   <!-- ===== FOOTER ===== -->
   <footer>
     <div class="container footer-inner">
-      <div class="footer-links">
-        <a href="https://github.com/elcronos/tarsa" rel="noopener noreferrer">GitHub</a>
-        <a href="https://github.com/elcronos/tarsa/blob/main/LICENSE" class="mit-badge" rel="noopener noreferrer">
-          MIT License
+      <div class="footer-brand">
+        <a href="/" class="footer-logo-link" aria-label="Tarsa home">
+          <!-- Lens motif: concentric circles with crosshair -->
+          <svg class="footer-lens" width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <circle cx="14" cy="14" r="12" stroke="var(--accent)" stroke-width="1.2" opacity=".4"/>
+            <circle cx="14" cy="14" r="7" stroke="var(--accent)" stroke-width="1.2" opacity=".6"/>
+            <circle cx="14" cy="14" r="2.5" fill="var(--accent)" opacity=".8"/>
+            <line x1="14" y1="2" x2="14" y2="6" stroke="var(--accent)" stroke-width="1" opacity=".4"/>
+            <line x1="14" y1="22" x2="14" y2="26" stroke="var(--accent)" stroke-width="1" opacity=".4"/>
+            <line x1="2" y1="14" x2="6" y2="14" stroke="var(--accent)" stroke-width="1" opacity=".4"/>
+            <line x1="22" y1="14" x2="26" y2="14" stroke="var(--accent)" stroke-width="1" opacity=".4"/>
+          </svg>
+          <span class="footer-wordmark">Tarsa</span>
         </a>
+        <p class="footer-tagline">Live observability for Claude Code</p>
       </div>
+      <nav class="footer-links" aria-label="Footer links">
+        <a href="https://github.com/elcronos/tarsa" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/elcronos/tarsa/blob/main/LICENSE" rel="noopener noreferrer">MIT License</a>
+        <a href="#install">Install</a>
+        <a href="#features">Features</a>
+      </nav>
       <p class="footer-disclaimer">
-        Claude and Claude Code are trademarks of Anthropic. This project is not affiliated with or endorsed by Anthropic.
+        Claude and Claude Code are trademarks of Anthropic.<br>
+        This project is not affiliated with or endorsed by Anthropic.
       </p>
     </div>
   </footer>
 
-  <!-- Copy-to-clipboard (progressive enhancement) -->
+  <!-- Sticky nav: auto-hide on scroll down, show on scroll up -->
+  <script>
+    (function() {
+      var nav = document.querySelector('.sticky-nav');
+      var lastY = 0;
+      var ticking = false;
+      window.addEventListener('scroll', function() {
+        if (!ticking) {
+          requestAnimationFrame(function() {
+            var y = window.scrollY;
+            if (y > lastY && y > 80) {
+              nav.classList.add('nav-hidden');
+            } else {
+              nav.classList.remove('nav-hidden');
+            }
+            lastY = y;
+            ticking = false;
+          });
+          ticking = true;
+        }
+      }, { passive: true });
+    })();
+  </script>
+
+  <!-- Copy-to-clipboard -->
   <script>
     document.querySelectorAll('.pre-wrap').forEach(function(wrap) {
       var pre = wrap.querySelector('pre');
@@ -296,7 +463,8 @@
       btn.textContent = 'copy';
       btn.setAttribute('aria-label', 'Copy code to clipboard');
       btn.addEventListener('click', function() {
-        var text = pre.querySelector('code') ? pre.querySelector('code').textContent : pre.textContent;
+        var code = pre.querySelector('code');
+        var text = code ? code.textContent : pre.textContent;
         navigator.clipboard.writeText(text.trim()).then(function() {
           btn.textContent = 'copied!';
           setTimeout(function() { btn.textContent = 'copy'; }, 2000);
