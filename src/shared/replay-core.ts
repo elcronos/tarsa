@@ -40,6 +40,21 @@ export function shortId(): string {
 }
 
 /**
+ * Coerce an unknown value to readable text. Strings pass through; other
+ * values are JSON-stringified. Avoids "[object Object]" from `String(obj)`.
+ */
+export function coerceText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Portable basename — works in both Node and browser. Splits on `/` or `\\`
  * and returns the last segment, falling back to the whole string when no
  * separator is present.
@@ -424,7 +439,7 @@ export function handlePreToolUse(s: State, e: Event): State {
       const rootId = rootAgentId(sessionId);
       const desc = String(toolInput["description"] ?? "").trim();
       const subType = String(toolInput["subagent_type"] ?? "").trim() || null;
-      const prompt = String(toolInput["prompt"] ?? "").slice(0, 2000);
+      const prompt = coerceText(toolInput["prompt"]).slice(0, 2000);
       const childAgent: Agent = {
         id: childId,
         name: desc || subType || childId.slice(0, 12),
@@ -640,7 +655,7 @@ export function handleSubagentStart(s: State, e: Event): State {
   );
   const subagentType =
     String(toolInput["subagent_type"] ?? agentType ?? "") || null;
-  const prompt = String(toolInput["prompt"] ?? "").slice(0, 2000);
+  const prompt = coerceText(toolInput["prompt"]).slice(0, 2000);
 
   // Mutates: agents, possibly tool_calls, possibly edges.
   const agents = new Map(s.agents);
@@ -715,7 +730,7 @@ export function handleSubagentStop(s: State, e: Event): State {
   const agent = s.agents.get(agentId);
   if (!agent || agentId.startsWith("root:")) return s;
 
-  const result = String((e as Record<string, unknown>)["result"] ?? "").slice(0, 2000);
+  const result = coerceText((e as Record<string, unknown>)["result"]).slice(0, 2000);
 
   return setAgent(s, agentId, {
     ...agent,

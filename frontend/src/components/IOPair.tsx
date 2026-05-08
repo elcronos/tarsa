@@ -110,8 +110,14 @@ function JsonOrPre({
     );
   }
 
-  // Convert to string
-  const text = typeof value === "string" ? value : String(value);
+  // Convert to string. Use JSON.stringify for objects so we never render
+  // "[object Object]"; primitives keep their natural string form.
+  const text =
+    typeof value === "string"
+      ? value
+      : value !== null && typeof value === "object"
+        ? JSON.stringify(value)
+        : String(value);
 
   // Try to parse as JSON
   const parsed = tryParseJson(text);

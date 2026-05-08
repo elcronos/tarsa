@@ -571,7 +571,8 @@ export function createApp(opts: ServerOptions): Hono {
           .map((tc, i) => {
             const msg =
               tc.input?.["message"] ?? tc.input?.["prompt"] ?? tc.input?.["text"] ?? "";
-            return `── SendMessage #${i + 1} ──\n${String(msg)}`;
+            const s = typeof msg === "string" ? msg : JSON.stringify(msg);
+            return `── SendMessage #${i + 1} ──\n${s}`;
           })
           .join("\n\n");
         return c.json({ prompt: text, source: "send_messages" });
