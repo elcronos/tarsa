@@ -392,15 +392,17 @@ export default function TopBar({
           <span className="opacity-50">⌘K</span>
         </button>
 
-        {/* New Session (spawn tmux) button */}
-        <button
-          onClick={handleSpawn}
-          className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border border-[var(--border)] text-[10px] font-mono text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors cursor-pointer"
-          title="Spawn new Claude session in tmux"
-          aria-label="New session"
-        >
-          + session
-        </button>
+        {/* New Session (spawn tmux) button — hidden until UX is reworked */}
+        {false && (
+          <button
+            onClick={handleSpawn}
+            className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border border-[var(--border)] text-[10px] font-mono text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors cursor-pointer"
+            title="Spawn new Claude session in tmux"
+            aria-label="New session"
+          >
+            + session
+          </button>
+        )}
 
         {/* D13 — Copy session link */}
         {selectedSessionId && (
