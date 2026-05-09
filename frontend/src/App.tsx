@@ -253,11 +253,29 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [searchOpen, selectedAgentId]);
 
-  const handleSearchResult = useCallback((eventId: string) => {
-    setSearchOpen(false);
-    setSelectedEventId(eventId);
-    setActiveView("replay");
-  }, []);
+  const [flashEventId, setFlashEventId] = useState<string | null>(null);
+  const handleSearchResult = useCallback(
+    (result: { event: { id: string; session_id?: string; agent_id?: string } }) => {
+      const ev = result.event;
+      setSearchOpen(false);
+      // Switch to the session that owns the event so it's actually in view.
+      if (ev.session_id) setSelectedSessionId(ev.session_id);
+      // Reset filters that could hide the event.
+      setStatusFilter(ALL_STATUSES);
+      setSelectedEventId(ev.id);
+      if (ev.agent_id) setSelectedAgentId(ev.agent_id);
+      setActiveView("replay");
+      setFlashEventId(ev.id);
+    },
+    []
+  );
+
+  // Auto-clear flash highlight after a couple seconds.
+  useEffect(() => {
+    if (!flashEventId) return;
+    const t = setTimeout(() => setFlashEventId(null), 2400);
+    return () => clearTimeout(t);
+  }, [flashEventId]);
 
   // Time range for scrubber
   const sessionStart = displayEvents.length > 0 ? displayEvents[0]!.ts : Date.now();
@@ -349,6 +367,7 @@ export default function App() {
                 events={displayEvents}
                 toolCalls={displayState.tool_calls}
                 selectedEventId={selectedEventId}
+                flashEventId={flashEventId}
                 onSelectEvent={setSelectedEventId}
                 onSelectAgent={handleSelectAgent}
                 state={displayState}

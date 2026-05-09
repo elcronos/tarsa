@@ -10,6 +10,8 @@ interface ReplayViewProps {
   events: Event[];
   toolCalls: Map<string, ToolCall[]>;
   selectedEventId?: string | null;
+  /** Event id to flash-highlight briefly (e.g. when navigated to from search). */
+  flashEventId?: string | null;
   onSelectEvent?: (id: string | null) => void;
   onSelectAgent?: (id: string | null) => void;
   state?: State;
@@ -76,6 +78,7 @@ function buildRetrySet(events: Event[]): Set<string> {
 function EventRow({
   event,
   isSelected,
+  isFlashing,
   isRetry,
   agentName,
   onClick,
@@ -84,6 +87,7 @@ function EventRow({
 }: {
   event: Event;
   isSelected: boolean;
+  isFlashing: boolean;
   isRetry: boolean;
   agentName: string;
   onClick: () => void;
@@ -105,8 +109,10 @@ function EventRow({
     <div
       ref={scrollRef}
       className={`border-b border-[var(--border)] cursor-pointer transition-colors ${
-        isSelected ? "bg-[var(--surface-raised)]" : "hover:bg-[var(--surface-raised)]/50"
-      }`}
+        isSelected
+          ? "bg-[var(--surface-raised)] ring-1 ring-inset ring-[var(--accent)]"
+          : "hover:bg-[var(--surface-raised)]/50"
+      } ${isFlashing ? "tarsa-flash" : ""}`}
       onClick={onClick}
     >
       {/* Collapsed row */}
@@ -189,6 +195,7 @@ export default function ReplayView({
   events,
   toolCalls: _toolCalls,
   selectedEventId,
+  flashEventId,
   onSelectEvent,
   onSelectAgent,
   state,
@@ -464,6 +471,7 @@ export default function ReplayView({
             key={e.id}
             event={e}
             isSelected={e.id === selectedId}
+            isFlashing={flashEventId != null && e.id === flashEventId}
             isRetry={retrySet.has(e.id)}
             agentName={agentNames.get(e.agent_id ?? "") ?? e.agent_id?.slice(0, 12) ?? "unknown"}
             onClick={() => handleSelect(e.id, e.agent_id)}

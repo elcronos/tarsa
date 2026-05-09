@@ -156,3 +156,12 @@ body,
 .react-flow__minimap {
   background: var(--surface);
 }
+
+@keyframes tarsa-flash {
+  0%   { background-color: rgba(251, 191, 36, 0.45); box-shadow: inset 0 0 0 2px rgba(251, 191, 36, 0.9); }
+  60%  { background-color: rgba(251, 191, 36, 0.20); box-shadow: inset 0 0 0 2px rgba(251, 191, 36, 0.45); }
+  100% { background-color: transparent; box-shadow: inset 0 0 0 2px transparent; }
+}
+.tarsa-flash {
+  animation: tarsa-flash 2.4s ease-out 1;
+}
