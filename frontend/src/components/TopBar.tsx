@@ -16,9 +16,9 @@ const BASE_TABS: Tab[] = [
   { id: "timeline", label: "Timeline" },
   { id: "replay", label: "Replay" },
   { id: "insights", label: "Insights" },
-  { id: "compare", label: "Compare" },
+  // Compare and Team tabs are hidden until they earn their keep —
+  // re-enable here when the views are reworked.
 ];
-const TEAM_TAB: Tab = { id: "team", label: "Team" };
 
 interface TopBarProps {
   activeView: string;
@@ -133,7 +133,9 @@ export default function TopBar({
   selectedSessionId,
   sessionBudgetUsd,
 }: TopBarProps) {
-  const TABS: Tab[] = showTeamTab ? [...BASE_TABS, TEAM_TAB] : BASE_TABS;
+  // Team tab intentionally suppressed; honor showTeamTab once view is reworked.
+  void showTeamTab;
+  const TABS: Tab[] = BASE_TABS;
   const [spawnToast, setSpawnToast] = useState<{ msg: string; isError: boolean } | null>(null);
   const [insights, setInsights] = useState<InsightsSummary | null>(null);
   const [copyToast, setCopyToast] = useState(false);
