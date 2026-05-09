@@ -133,6 +133,22 @@ class ClaudeCodeWebServer {
   setupExpress() {
     this.app.use(cors());
     this.app.use(express.json());
+
+    // TARSA PATCH — security headers:
+    // 1. `Referrer-Policy: no-referrer` keeps the auth token in the iframe URL
+    //    from leaking to third-party CDNs (fonts.googleapis.com, unpkg.com)
+    //    via the Referer header on initial subresource loads.
+    // 2. `Content-Security-Policy: frame-ancestors` restricts embedding to
+    //    Tarsa's own origin, so a rogue local page that knows the token still
+    //    cannot embed cc-web for clickjacking.
+    this.app.use((req, res, next) => {
+      res.setHeader('Referrer-Policy', 'no-referrer');
+      res.setHeader(
+        'Content-Security-Policy',
+        "frame-ancestors http://localhost:8100 http://127.0.0.1:8100"
+      );
+      next();
+    });
     
     // Serve manifest.json with correct MIME type
     this.app.get('/manifest.json', (req, res) => {

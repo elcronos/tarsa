@@ -512,7 +512,7 @@ export function handlePostToolUse(s: State, e: Event, isError = false): State {
   const toolName = String(e.tool_name ?? "unknown");
   const toolUseId = String(e.tool_use_id ?? "");
   const agentId = e.agent_id ?? rootAgentId(sessionId);
-  const response = String(e.tool_response ?? "").slice(0, 2000);
+  const response = coerceText(e.tool_response).slice(0, 2000);
   const status = isError ? ("error" as const) : ("done" as const);
 
   let next = s;
@@ -836,10 +836,24 @@ export function handleUserPromptSubmit(s: State, e: Event): State {
     if (p) prevPrompts.push({ prompt: p, ts: ev.ts });
   }
 
-  const marker = classifyMarker(e, prevPrompts);
-  if (!marker) return s;
+  // Capture the first prompt as session.title so the sidebar can show
+  // intent ("refactor X") instead of duplicate cwd basenames. Set once,
+  // never overwritten — the first prompt is the most identifying.
+  let withTitle = s;
+  const session = withTitle.sessions.get(sessionId);
+  if (session && !session.title) {
+    const prompt = extractPrompt(e).trim();
+    if (prompt) {
+      const firstLine = prompt.split("\n")[0]!;
+      const title = firstLine.length > 60 ? `${firstLine.slice(0, 57)}…` : firstLine;
+      withTitle = setSession(withTitle, sessionId, { ...session, title });
+    }
+  }
 
-  const existing = s.iterations.get(sessionId) ?? [];
+  const marker = classifyMarker(e, prevPrompts);
+  if (!marker) return withTitle;
+
+  const existing = withTitle.iterations.get(sessionId) ?? [];
   // Determine iteration number
   const nextN = marker.n ?? (existing.length > 0 ? (existing[existing.length - 1]?.n ?? 0) + 1 : 1);
 
@@ -849,7 +863,7 @@ export function handleUserPromptSubmit(s: State, e: Event): State {
   );
 
   // Skip duplicate iteration numbers (idempotency on replay)
-  if (closed.some((it) => it.n === nextN)) return s;
+  if (closed.some((it) => it.n === nextN)) return withTitle;
 
   const newIter: Iteration = {
     n: nextN,
@@ -860,9 +874,9 @@ export function handleUserPromptSubmit(s: State, e: Event): State {
     marker_source: marker.source,
   };
 
-  const next = new Map(s.iterations);
-  next.set(sessionId, [...closed, newIter]);
-  return withIterations(s, next);
+  const nextIters = new Map(withTitle.iterations);
+  nextIters.set(sessionId, [...closed, newIter]);
+  return withIterations(withTitle, nextIters);
 }
 
 /**

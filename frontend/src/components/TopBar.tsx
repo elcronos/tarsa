@@ -42,6 +42,10 @@ interface TopBarProps {
   selectedSessionId?: string | null;
   /** Budget for the selected session in USD (0 or undefined = no budget). */
   sessionBudgetUsd?: number;
+  /** Called when the user clicks the `+ terminal` button. The parent opens
+   *  the bottom-dock folder picker — no modal — so all terminal placements
+   *  share a single surface. */
+  onNewTerminal?: () => void;
 }
 
 function StatusPill({
@@ -132,6 +136,7 @@ export default function TopBar({
   sessionCwd,
   selectedSessionId,
   sessionBudgetUsd,
+  onNewTerminal,
 }: TopBarProps) {
   // Team tab intentionally suppressed; honor showTeamTab once view is reworked.
   void showTeamTab;
@@ -406,6 +411,16 @@ export default function TopBar({
           </button>
         )}
 
+        {/* New Project — create folder + open embedded terminal there */}
+        <button
+          onClick={() => onNewTerminal?.()}
+          className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border border-[var(--border)] text-[10px] font-mono text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] hover:border-[var(--accent)] transition-colors cursor-pointer"
+          title="Create or open a project folder in an embedded terminal"
+          aria-label="New terminal"
+        >
+          + terminal
+        </button>
+
         {/* D13 — Copy session link */}
         {selectedSessionId && (
           <button
@@ -459,6 +474,282 @@ export default function TopBar({
           Link copied!
         </div>
       )}
+
+    </div>
+  );
+}
+
+// ── Folder picker overlay ────────────────────────────────────────────────────
+//
+// We embed cc-web's existing folder-browser UI (which already supports
+// browsing, creating folders, and selecting an arbitrary directory) instead
+// of asking the user to type a path. The iframe is loaded with the
+// `?action=newproject` flag (TARSA PATCH in vendor/cc-web/src/public/app.js)
+// so vultuk skips its session-list and shows the folder picker right away.
+// When vultuk creates a session it postMessages back to the parent window
+// with {cwd, name}; we add that to Tarsa's projects sidebar.
+function FolderPickerOverlay({
+  onClose,
+  onPicked,
+}: {
+  onClose: () => void;
+  onPicked?: (project: { cwd: string; name: string }) => void;
+}) {
+  const [info, setInfo] = useState<{ enabled: boolean; port: number; token: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch cc-web port + token.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/terminal/info")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data) => { if (!cancelled) setInfo(data); })
+      .catch((err) => { if (!cancelled) setError(String(err)); });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Listen for vultuk's session-created postMessage.
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const data = e.data as { type?: string; cwd?: string; name?: string };
+      if (!data || data.type !== "tarsa:session-created" || !data.cwd) return;
+      onPicked?.({ cwd: data.cwd, name: data.name ?? data.cwd.split("/").pop() ?? "project" });
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, [onPicked]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-[90vw] h-[85vh] rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-2xl flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border)]">
+          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+            new project · pick or create a folder
+          </span>
+          <button
+            onClick={onClose}
+            className="text-[var(--fg-subtle)] hover:text-[var(--fg)] text-sm px-2"
+            aria-label="Close picker"
+          >
+            ×
+          </button>
+        </div>
+        {error ? (
+          <div className="flex-1 flex items-center justify-center text-[11px] font-mono text-red-400">
+            {error}
+          </div>
+        ) : info?.enabled && info.token && info.port ? (
+          <iframe
+            title="Folder picker"
+            src={`http://localhost:${info.port}/?token=${encodeURIComponent(info.token)}&action=newproject`}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-clipboard-write"
+            referrerPolicy="no-referrer"
+            className="flex-1 w-full bg-black"
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-[11px] font-mono text-[var(--fg-subtle)]">
+            Loading picker…
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── (legacy) NewProjectModal — kept around for reference only ────────────────
+type ProjectMode = "create" | "open";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function NewProjectModal_unused({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated?: (project: { cwd: string; name: string }) => void;
+}) {
+  const [mode, setMode] = useState<ProjectMode>("create");
+  // Create-mode fields
+  const [parent, setParent] = useState("~/Desktop");
+  const [name, setName] = useState("");
+  const [gitInit, setGitInit] = useState(true);
+  // Open-mode fields
+  const [openPath, setOpenPath] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const ensureAndHandoff = useCallback(
+    async (project: { cwd: string; name: string }) => {
+      // Pre-create the cc-web terminal session bound to the cwd so vultuk
+      // auto-attaches when the embedded iframe loads.
+      await fetch("/api/terminal/ensure-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cwd: project.cwd, name: project.name }),
+      }).catch(() => null);
+      onCreated?.(project);
+      onClose();
+    },
+    [onCreated, onClose]
+  );
+
+  const submit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError(null);
+      setSubmitting(true);
+      try {
+        if (mode === "create") {
+          const r = await fetch("/api/project/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ parent, name, gitInit }),
+          });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
+          await ensureAndHandoff({ cwd: data.cwd, name: data.name });
+        } else {
+          const r = await fetch("/api/project/open", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ cwd: openPath }),
+          });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data.error ?? `HTTP ${r.status}`);
+          await ensureAndHandoff({ cwd: data.cwd, name: data.name });
+        }
+      } catch (err) {
+        setError(String(err instanceof Error ? err.message : err));
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [mode, parent, name, gitInit, openPath, ensureAndHandoff]
+  );
+
+  const canSubmit =
+    mode === "create" ? name.trim().length > 0 : openPath.trim().length > 0;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <form
+        onSubmit={submit}
+        className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-2xl p-4 space-y-3"
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-mono uppercase tracking-widest text-[var(--fg-subtle)]">
+            project
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[var(--fg-subtle)] hover:text-[var(--fg)] text-sm"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Mode toggle */}
+        <div className="flex items-center gap-1 text-[10px] font-mono">
+          {(["create", "open"] as ProjectMode[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setMode(m); setError(null); }}
+              className={`px-2 py-1 rounded border transition-colors ${
+                mode === m
+                  ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
+                  : "border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg)]"
+              }`}
+            >
+              {m === "create" ? "create new" : "open existing"}
+            </button>
+          ))}
+        </div>
+
+        {mode === "create" ? (
+          <>
+            <label className="block">
+              <span className="text-[10px] font-mono text-[var(--fg-muted)]">parent directory</span>
+              <input
+                type="text"
+                value={parent}
+                onChange={(e) => setParent(e.target.value)}
+                placeholder="~/Desktop"
+                className="mt-1 w-full px-2 py-1 text-[12px] font-mono rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--fg)] focus:outline-none focus:border-[var(--accent)]"
+                required
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] font-mono text-[var(--fg-muted)]">name</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="my-new-project"
+                pattern="[A-Za-z0-9 _.\-]{1,80}"
+                className="mt-1 w-full px-2 py-1 text-[12px] font-mono rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--fg)] focus:outline-none focus:border-[var(--accent)]"
+                autoFocus
+                required
+              />
+            </label>
+            <label className="flex items-center gap-2 text-[11px] font-mono text-[var(--fg-muted)]">
+              <input
+                type="checkbox"
+                checked={gitInit}
+                onChange={(e) => setGitInit(e.target.checked)}
+              />
+              git init
+            </label>
+          </>
+        ) : (
+          <label className="block">
+            <span className="text-[10px] font-mono text-[var(--fg-muted)]">folder path</span>
+            <input
+              type="text"
+              value={openPath}
+              onChange={(e) => setOpenPath(e.target.value)}
+              placeholder="~/Desktop/my-existing-project"
+              className="mt-1 w-full px-2 py-1 text-[12px] font-mono rounded bg-[var(--bg)] border border-[var(--border)] text-[var(--fg)] focus:outline-none focus:border-[var(--accent)]"
+              autoFocus
+              required
+            />
+            <span className="block mt-1 text-[10px] font-mono text-[var(--fg-subtle)]">
+              must be inside your home directory
+            </span>
+          </label>
+        )}
+
+        {error && (
+          <div className="text-[11px] font-mono text-red-400 px-2 py-1 rounded border border-red-500/30 bg-red-500/10">
+            {error}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1 text-[11px] font-mono rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg)]"
+          >
+            cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting || !canSubmit}
+            className="px-3 py-1 text-[11px] font-mono rounded border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)]/10 disabled:opacity-50"
+          >
+            {submitting
+              ? mode === "create" ? "creating…" : "opening…"
+              : mode === "create" ? "create + open terminal" : "open + start terminal"}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

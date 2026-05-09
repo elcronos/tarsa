@@ -1,6 +1,23 @@
 // Authentication module for Claude Code Web
+//
+// TARSA PATCH: when the page is opened with ?token=... in the URL (which is
+// how Tarsa embeds cc-web in an iframe), accept the URL token, persist it to
+// sessionStorage, and strip it from the address bar. This avoids showing the
+// "Authentication Required" modal inside the embedded terminal.
 class AuthManager {
     constructor() {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const urlToken = params.get('token');
+            if (urlToken) {
+                sessionStorage.setItem('cc-web-token', urlToken);
+                params.delete('token');
+                const qs = params.toString();
+                const newUrl =
+                    window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
+                window.history.replaceState({}, '', newUrl);
+            }
+        } catch (_) { /* best-effort */ }
         this.token = sessionStorage.getItem('cc-web-token');
         this.authRequired = false;
     }

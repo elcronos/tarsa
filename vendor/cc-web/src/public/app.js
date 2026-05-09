@@ -95,6 +95,32 @@ class ClaudeCodeWebInterface {
             this.showModeSwitcher();
         }
         
+        // TARSA PATCH: when embedded with ?single=1, hide vultuk's session
+        // tab bar and "new tab" button. Used by Tarsa's per-agent Terminal
+        // tab where multi-session UI is noise — there's only ever one
+        // session bound to that agent's cwd.
+        try {
+            if (new URLSearchParams(window.location.search).get('single') === '1') {
+                document.body.classList.add('tarsa-single');
+            }
+        } catch (_) { /* best-effort */ }
+
+        // TARSA PATCH: when embedded with ?action=newproject, jump straight
+        // to the folder browser regardless of cached sessions. This is how
+        // Tarsa launches the "+ terminal" flow — the user picks a folder and
+        // vultuk handles session creation + claude spawn.
+        let tarsaForceNew = false;
+        try {
+            tarsaForceNew = new URLSearchParams(window.location.search).get('action') === 'newproject';
+        } catch (_) { /* best-effort */ }
+        if (tarsaForceNew) {
+            this.hideOverlay();
+            this.showFolderBrowser();
+            window.addEventListener('resize', () => this.fitTerminal());
+            window.addEventListener('beforeunload', () => this.disconnect());
+            return;
+        }
+
         // Check if there are existing sessions
         console.log('[Init] Checking sessions, tabs.size:', this.sessionTabManager.tabs.size);
         if (this.sessionTabManager.tabs.size > 0) {
@@ -344,6 +370,23 @@ class ClaudeCodeWebInterface {
         
         this.terminal.open(document.getElementById('terminal'));
         this.fitTerminal();
+
+        // TARSA PATCH: alt-screen scroll. TUIs (claude code, vim) switch to
+        // the xterm alt-buffer where xterm.js disables wheel scrollback by
+        // design. Translate wheel into arrow-key escape sequences so users
+        // can scroll inside the TUI. Normal-buffer scrollback is unchanged.
+        const termEl = document.getElementById('terminal');
+        if (termEl) {
+            termEl.addEventListener('wheel', (e) => {
+                const isAlt = this.terminal.buffer.active.type === 'alternate';
+                if (!isAlt) return;
+                if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
+                e.preventDefault();
+                const lines = Math.max(1, Math.min(5, Math.round(Math.abs(e.deltaY) / 40)));
+                const seq = e.deltaY < 0 ? '\x1b[A' : '\x1b[B';
+                this.send({ type: 'input', data: seq.repeat(lines) });
+            }, { passive: false });
+        }
 
         this.terminal.onData((data) => {
             if (this.socket && this.socket.readyState === WebSocket.OPEN) {
@@ -622,14 +665,27 @@ class ClaudeCodeWebInterface {
                 this.updateWorkingDir(message.workingDir);
                 this.updateSessionButton(message.sessionName);
                 this.loadSessions();
-                
+
                 // Add tab for the new session if using tab manager
                 if (this.sessionTabManager) {
                     this.sessionTabManager.addTab(message.sessionId, message.sessionName, 'idle', message.workingDir);
                     this.sessionTabManager.switchToTab(message.sessionId);
                 }
-                
+
                 this.showOverlay('startPrompt');
+                // TARSA PATCH: notify the embedding Tarsa window so it can
+                // register this folder as a project in the sidebar without
+                // making the user re-enter the path.
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type: 'tarsa:session-created',
+                            cwd: message.workingDir,
+                            name: message.sessionName,
+                            sessionId: message.sessionId,
+                        }, '*');
+                    }
+                } catch (_) { /* best-effort */ }
                 break;
                 
             case 'session_joined':
@@ -687,6 +743,13 @@ class ClaudeCodeWebInterface {
                         // This allows the user to restart Claude in the same session
                         this.terminal.writeln(`\r\n\x1b[33m${this.getAlias('claude')} has stopped in this session. Click "Start ${this.getAlias('claude')}" to restart.\x1b[0m`);
                         this.showOverlay('startPrompt');
+                        // TARSA PATCH: in single-session mode (Tarsa's per-agent
+                        // Terminal tab), the session-tab UI is hidden so the
+                        // user has no visible way to click Start Claude after
+                        // it exits. Auto-restart so the terminal stays usable.
+                        if (document.body.classList.contains('tarsa-single')) {
+                            setTimeout(() => this.startClaudeSession(), 250);
+                        }
                     }
                 }
                 break;
@@ -744,6 +807,11 @@ class ClaudeCodeWebInterface {
                 // Show start prompt to allow restarting Claude in this session
                 this.showOverlay('startPrompt');
                 this.loadSessions(); // Refresh session list
+                // TARSA PATCH: see session_joined comment — auto-restart in
+                // single-session mode so the embedded terminal stays usable.
+                if (document.body.classList.contains('tarsa-single')) {
+                    setTimeout(() => this.startClaudeSession(), 250);
+                }
                 break;
             case 'codex_stopped':
                 this.terminal.writeln(`\r\n\x1b[33mCodex Code stopped\x1b[0m`);

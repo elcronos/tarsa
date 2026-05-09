@@ -11,8 +11,9 @@ import { cors } from "hono/cors";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn, execFile } from "node:child_process";
+import { spawn, execFile, execFileSync } from "node:child_process";
 import crypto from "node:crypto";
+import os from "node:os";
 import { isBun } from "./runtime.js";
 import type { EventProcessor } from "./processor.js";
 import type { Database } from "./db.js";
@@ -175,7 +176,13 @@ export interface ServerOptions {
   allowRemote?: boolean;
   authToken?: string;
   /** Optional embedded-terminal supervisor (vendored cc-web). */
-  ccWeb?: { getInfo(): { enabled: boolean; port: number; token: string } };
+  ccWeb?: {
+    getInfo(): { enabled: boolean; port: number; token: string };
+    createSession(
+      workingDir: string,
+      name?: string
+    ): Promise<{ sessionId: string } | { error: string }>;
+  };
 }
 
 export function createApp(opts: ServerOptions): Hono {
@@ -500,6 +507,130 @@ export function createApp(opts: ServerOptions): Hono {
   app.get("/api/terminal/info", (c) => {
     if (!opts.ccWeb) return c.json({ enabled: false });
     return c.json(opts.ccWeb.getInfo());
+  });
+
+  // ── POST /api/project/create ────────────────────────────────────────
+  // Create a new project directory under $HOME and (optionally) `git init` it.
+  // Returns {cwd, name} on success. The frontend follows up with
+  // /api/terminal/ensure-session so the new dir opens in the embedded shell.
+  //
+  // Validation rules:
+  //   - parent must resolve (via realpath) to a path inside $HOME — symlink
+  //     escapes are rejected.
+  //   - name must match a strict allowlist; no slashes, no leading dot, no
+  //     shell metacharacters.
+  //   - target must not already exist.
+  app.post("/api/project/create", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      parent?: string;
+      name?: string;
+      gitInit?: boolean;
+    };
+    const { parent, name, gitInit } = body;
+    if (!parent || !name) {
+      return c.json({ error: "parent and name are required" }, 400);
+    }
+    if (!/^[A-Za-z0-9 _.-]{1,80}$/.test(name) || name.startsWith(".")) {
+      return c.json({ error: "invalid project name" }, 400);
+    }
+    const home = os.homedir();
+    const expandedParent = parent.replace(/^~(?=\/|$)/, home);
+    let realParent: string;
+    try {
+      realParent = fs.realpathSync(path.resolve(expandedParent));
+    } catch {
+      return c.json({ error: "parent directory does not exist" }, 400);
+    }
+    if (!realParent.startsWith(home + path.sep) && realParent !== home) {
+      return c.json({ error: "parent must be inside your home directory" }, 400);
+    }
+    const cwd = path.join(realParent, name);
+    if (fs.existsSync(cwd)) {
+      return c.json({ error: "a folder with that name already exists" }, 409);
+    }
+    try {
+      fs.mkdirSync(cwd, { recursive: false, mode: 0o755 });
+    } catch (err) {
+      return c.json({ error: `mkdir failed: ${String(err)}` }, 500);
+    }
+    if (gitInit) {
+      try {
+        execFileSync("git", ["init", "--quiet"], { cwd, stdio: "ignore" });
+      } catch {
+        /* non-fatal: dir created, just no git */
+      }
+    }
+    return c.json({ cwd, name });
+  });
+
+  // ── POST /api/project/open ──────────────────────────────────────────
+  // Open an existing folder as a Tarsa project. Validates the path exists
+  // and resolves (via realpath) under $HOME, then returns {cwd, name} so
+  // the frontend can open an embedded terminal there.
+  app.post("/api/project/open", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { cwd?: string };
+    if (!body.cwd) return c.json({ error: "cwd is required" }, 400);
+    const home = os.homedir();
+    const expanded = body.cwd.replace(/^~(?=\/|$)/, home);
+    let real: string;
+    try {
+      real = fs.realpathSync(path.resolve(expanded));
+    } catch {
+      return c.json({ error: "folder does not exist" }, 404);
+    }
+    if (!real.startsWith(home + path.sep) && real !== home) {
+      return c.json({ error: "folder must be inside your home directory" }, 400);
+    }
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(real);
+    } catch {
+      return c.json({ error: "cannot stat folder" }, 500);
+    }
+    if (!stat.isDirectory()) {
+      return c.json({ error: "path is not a directory" }, 400);
+    }
+    return c.json({ cwd: real, name: path.basename(real) });
+  });
+
+  // ── POST /api/terminal/ensure-session ───────────────────────────────
+  // Ask cc-web to create (or reuse) a terminal session bound to a working
+  // directory. Returns the cc-web sessionId. Used by the Terminal tab so
+  // opening it on agent X drops the user into a shell rooted at X's cwd.
+  app.post("/api/terminal/ensure-session", async (c) => {
+    if (!opts.ccWeb) return c.json({ error: "Terminal disabled" }, 503);
+    const body = await c.req.json().catch(() => ({})) as { cwd?: string; name?: string };
+    if (!body.cwd) return c.json({ error: "cwd is required" }, 400);
+    // Reject quickly when the cwd no longer exists — otherwise cc-web spawns
+    // claude in a missing directory and the terminal looks alive but is dead.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const fsMod = await import("node:fs");
+      if (!fsMod.existsSync(body.cwd)) {
+        return c.json({ error: `Working directory does not exist: ${body.cwd}` }, 404);
+      }
+    } catch {
+      /* if existsSync errors, let cc-web decide */
+    }
+    const result = await opts.ccWeb.createSession(body.cwd, body.name);
+    if ("error" in result) return c.json(result, 502);
+    return c.json(result);
+  });
+
+  // ── GET /api/agent/:id/session ───────────────────────────────────────
+  // Returns the session metadata (cwd, name) for an agent. The Terminal
+  // tab uses this to know which cwd to spawn a shell in.
+  app.get("/api/agent/:id/session", (c) => {
+    const id = c.req.param("id");
+    const agent = processor.state.agents.get(id);
+    if (!agent) return c.json({ error: "Agent not found" }, 404);
+    const session = processor.state.sessions.get(agent.session_id);
+    if (!session) return c.json({ error: "Session not found" }, 404);
+    return c.json({
+      id: session.id,
+      cwd: session.cwd ?? null,
+      name: session.name ?? null,
+    });
   });
 
   // ── GET /api/search?q= ──────────────────────────────────────────────

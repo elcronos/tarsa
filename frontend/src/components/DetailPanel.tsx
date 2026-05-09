@@ -36,6 +36,9 @@ interface DetailPanelProps {
   events: Event[];
   toolCalls: ToolCall[];
   onClose: () => void;
+  /** When true, hide the agent-scoped Terminal tab. Used so the user
+   *  doesn't see two terminals when a project terminal is already docked. */
+  hideTerminalTab?: boolean;
 }
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
@@ -1222,8 +1225,16 @@ export default function DetailPanel({
   events,
   toolCalls,
   onClose,
+  hideTerminalTab = false,
 }: DetailPanelProps) {
   const [activeTab, setActiveTab] = useState<TabId>("prompt");
+  // When the project terminal is already docked, drop the agent-scoped
+  // Terminal tab so the user only sees one terminal at a time.
+  const visibleTabs = hideTerminalTab ? TABS.filter((t) => t.id !== "terminal") : TABS;
+  // Defensive: if the active tab was hidden out from under us, fall back.
+  useEffect(() => {
+    if (hideTerminalTab && activeTab === "terminal") setActiveTab("prompt");
+  }, [hideTerminalTab, activeTab]);
 
   return (
     <div className="w-[720px] shrink-0 border-l border-[var(--border)] bg-[var(--surface)] flex flex-col overflow-hidden">
@@ -1250,7 +1261,7 @@ export default function DetailPanel({
 
       {/* Tab strip */}
       <div className="flex items-center border-b border-[var(--border)] shrink-0 px-1">
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -1297,8 +1308,15 @@ function TerminalTab({ agent }: { agent: Agent }) {
   const [info, setInfo] = useState<{ enabled: boolean; port: number; token: string } | null>(
     null
   );
+  const [sessionInfo, setSessionInfo] = useState<{ cwd: string | null; name: string | null } | null>(
+    null
+  );
+  const [ensureStatus, setEnsureStatus] = useState<"idle" | "ensuring" | "ready" | "error">(
+    "idle"
+  );
   const [error, setError] = useState<string | null>(null);
 
+  // 1. Fetch cc-web port + token (one-shot, no agent dep).
   useEffect(() => {
     let cancelled = false;
     fetch("/api/terminal/info")
@@ -1314,6 +1332,53 @@ function TerminalTab({ agent }: { agent: Agent }) {
     };
   }, []);
 
+  // 2. Resolve this agent's session cwd so we can deeplink the terminal there.
+  useEffect(() => {
+    let cancelled = false;
+    setSessionInfo(null);
+    fetch(`/api/agent/${encodeURIComponent(agent.id)}/session`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data) => {
+        if (!cancelled) setSessionInfo({ cwd: data.cwd ?? null, name: data.name ?? null });
+      })
+      .catch(() => {
+        if (!cancelled) setSessionInfo({ cwd: null, name: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.id]);
+
+  // 3. Ask Tarsa to ensure cc-web has a session bound to that cwd. Once it
+  //    exists, vultuk auto-attaches to the first tab on iframe load.
+  useEffect(() => {
+    if (!info?.enabled || !sessionInfo) return;
+    if (!sessionInfo.cwd) {
+      // No cwd known — fall back to letting vultuk show its folder picker.
+      setEnsureStatus("ready");
+      return;
+    }
+    let cancelled = false;
+    setEnsureStatus("ensuring");
+    fetch("/api/terminal/ensure-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cwd: sessionInfo.cwd, name: sessionInfo.name ?? undefined }),
+    })
+      .then((r) => (r.ok ? r.json() : r.json().then((d) => Promise.reject(new Error(d.error ?? `HTTP ${r.status}`)))))
+      .then(() => {
+        if (!cancelled) setEnsureStatus("ready");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setEnsureStatus("error");
+        setError(String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [info?.enabled, sessionInfo]);
+
   if (error) {
     return (
       <div className="text-[10px] font-mono text-red-400 py-4 text-center">
@@ -1321,8 +1386,12 @@ function TerminalTab({ agent }: { agent: Agent }) {
       </div>
     );
   }
-  if (!info) {
-    return <div className="text-[10px] font-mono text-[var(--fg-subtle)] py-4 text-center">Loading terminal…</div>;
+  if (!info || !sessionInfo || ensureStatus === "ensuring" || ensureStatus === "idle") {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)] py-4 text-center">
+        Loading terminal…
+      </div>
+    );
   }
   if (!info.enabled) {
     return (
@@ -1332,14 +1401,16 @@ function TerminalTab({ agent }: { agent: Agent }) {
     );
   }
 
-  // Vendored cc-web runs on the same host on a sibling port. Auth token is
-  // shared with Tarsa at startup so the iframe URL is the only entry point.
-  const url = `http://localhost:${info.port}/?token=${encodeURIComponent(info.token)}`;
+  // ?single=1 tells the patched cc-web to hide its session tab bar so the
+  // user can't spawn extra sessions from the agent-scoped right panel.
+  const url = `http://localhost:${info.port}/?token=${encodeURIComponent(info.token)}&single=1`;
 
   return (
     <div className="flex flex-col gap-1 h-full">
       <div className="flex items-center justify-between text-[9px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider">
-        <span>terminal · session {agent.session_id.slice(0, 8)}</span>
+        <span title={sessionInfo.cwd ?? ""}>
+          terminal{sessionInfo.cwd ? ` · ${sessionInfo.cwd.split("/").slice(-2).join("/")}` : ""}
+        </span>
         <a
           href={url}
           target="_blank"
@@ -1352,8 +1423,22 @@ function TerminalTab({ agent }: { agent: Agent }) {
       <iframe
         title="Embedded terminal"
         src={url}
+        // sandbox locks the iframe down. We allow only what the embedded
+        // terminal genuinely needs:
+        //   allow-scripts        — vultuk is a JS app
+        //   allow-same-origin    — it makes same-origin XHR/WS to itself
+        //   allow-forms          — auth form (kept even though we bypass)
+        //   allow-clipboard-write — copy from terminal output
+        // Notably absent: allow-top-navigation (no escape from Tarsa frame),
+        // allow-popups (no new windows), allow-modals (no native dialogs).
+        sandbox="allow-scripts allow-same-origin allow-forms allow-clipboard-write"
+        // No-referrer in addition to the meta tag inside vultuk so initial
+        // sub-resource fetches from CDNs never see the auth token.
+        referrerPolicy="no-referrer"
         className="flex-1 w-full rounded border border-[var(--border)] bg-black"
-        style={{ minHeight: 360 }}
+        // xterm needs a real height to lay out its grid. The DetailPanel
+        // tab body isn't full-height by default, so set an explicit min.
+        style={{ minHeight: "70vh", height: "100%" }}
       />
     </div>
   );

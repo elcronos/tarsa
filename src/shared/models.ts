@@ -95,6 +95,9 @@ export interface Session {
   root_agent_id: string;
   status: "active" | "complete";
   name: string | null;
+  /** First user prompt for the session, truncated. Differentiates sessions
+   *  that share the same cwd basename. Null until first UserPromptSubmit. */
+  title?: string | null;
   cwd?: string;
   budget_usd?: number;
   kill_on_exceed?: boolean;

@@ -20,6 +20,17 @@ interface ShellProps {
   agentsBySession?: Map<string, Agent[]>;
   /** Active project filter — only sessions in this project are shown */
   projectFilter?: string | null;
+  /** Clear the active project filter (used by sidebar "+N hidden" hint). */
+  onClearProjectFilter?: () => void;
+  /** Tarsa-managed projects (cwds opened via the `+ terminal` flow). */
+  projects?: Array<{ cwd: string; name: string }>;
+  selectedProjectCwd?: string | null;
+  onSelectProject?: (cwd: string | null) => void;
+  onRemoveProject?: (cwd: string) => void;
+  /** Hide the agent-scoped Terminal tab in the right DetailPanel. Set when
+   *  a project terminal is already docked in the main area so the user
+   *  doesn't see two terminals competing for screen space. */
+  hideAgentTerminalTab?: boolean;
   children: ReactNode;
 }
 
@@ -30,6 +41,7 @@ function SessionItem({
   onDismiss,
   agents,
   now,
+  showIdSuffix = false,
 }: {
   session: Session;
   isSelected: boolean;
@@ -37,9 +49,16 @@ function SessionItem({
   onDismiss: (e: React.MouseEvent) => void;
   agents: Agent[];
   now: number;
+  showIdSuffix?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
-  const name = session.name ?? `Session ${session.id.slice(0, 8)}`;
+  // Prefer first user prompt as the label so sessions sharing a cwd basename
+  // are still distinguishable. Fall back to cwd basename, then session id.
+  const fallback = session.name ?? `Session ${session.id.slice(0, 8)}`;
+  const baseName = session.title ?? fallback;
+  const name = showIdSuffix && !session.title
+    ? `${baseName} #${session.id.slice(0, 4)}`
+    : baseName;
   const isActive = session.status === "active";
   const duration = session.ended_at
     ? formatDuration(session.ended_at - session.started_at)
@@ -197,6 +216,10 @@ function ProjectGroup({
               }}
               agents={agentsBySession?.get(s.id) ?? []}
               now={now}
+              // When multiple sessions in the same project share the same
+              // basename label (e.g. all run from the repo root), append a
+              // short id suffix so the user can tell them apart.
+              showIdSuffix={sessions.length > 1}
             />
           ))}
         </div>
@@ -218,6 +241,12 @@ export default function Shell({
   toolCalls,
   agentsBySession,
   projectFilter,
+  onClearProjectFilter,
+  projects = [],
+  selectedProjectCwd = null,
+  onSelectProject,
+  onRemoveProject,
+  hideAgentTerminalTab = false,
   children,
 }: ShellProps) {
   const now = useNow(5_000);
@@ -266,6 +295,12 @@ export default function Shell({
   const filteredSessions = projectFilter
     ? sortedSessions.filter((s) => projectName(s.cwd) === projectFilter)
     : sortedSessions;
+  // How many sessions the project filter hides — surfaced as a clickable
+  // hint so the user can tell when sessions are missing because of a pinned
+  // filter (rather than a bug).
+  const hiddenByFilter = projectFilter
+    ? sortedSessions.length - filteredSessions.length
+    : 0;
 
   // Group sessions by project name
   const projectGroups = new Map<string, Session[]>();
@@ -301,22 +336,63 @@ export default function Shell({
           )}
         </div>
         <div className="flex-1 overflow-y-auto p-1 space-y-0.5">
-          {/* All sessions entry */}
-          <button
-            onClick={() => onSelectSession(null)}
-            className={`
-              w-full text-left px-3 py-2 rounded transition-colors border-l-2
-              ${
-                selectedSessionId === null
-                  ? "bg-[var(--surface-raised)] text-[var(--fg)] border-l-[var(--accent)]"
-                  : "text-[var(--fg-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--fg)] border-l-transparent"
-              }
-            `}
-          >
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-mono">All sessions</span>
+          {/* Tarsa-managed projects (manually opened folders / new projects) */}
+          {projects.length > 0 && (
+            <div className="mb-2">
+              <div className="px-2 py-1 text-[9px] font-mono uppercase tracking-widest text-[var(--accent)]">
+                Projects
+              </div>
+              {projects.map((p) => {
+                const isSel = selectedProjectCwd === p.cwd;
+                return (
+                  <div key={p.cwd} className="relative group">
+                    <button
+                      onClick={() => onSelectProject?.(isSel ? null : p.cwd)}
+                      className={`
+                        w-full text-left px-3 py-2 rounded transition-colors border-l-2
+                        ${
+                          isSel
+                            ? "bg-[var(--surface-raised)] text-[var(--fg)] border-l-[var(--accent)]"
+                            : "text-[var(--fg-muted)] hover:bg-[var(--surface-raised)] hover:text-[var(--fg)] border-l-transparent"
+                        }
+                      `}
+                    >
+                      <div className="flex items-center gap-1.5 pr-4">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-[var(--accent)]" />
+                        <span className="truncate text-xs font-mono">{p.name}</span>
+                      </div>
+                      <div className="mt-0.5 pl-3 text-[10px] text-[var(--fg-subtle)] font-mono truncate" title={p.cwd}>
+                        {p.cwd.replace(/^\/Users\/[^/]+/, "~")}
+                      </div>
+                    </button>
+                    {onRemoveProject && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onRemoveProject(p.cwd); }}
+                        className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-[var(--fg-subtle)] hover:text-red-400 text-xs"
+                        title="Remove from sidebar"
+                        aria-label="Remove project"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </button>
+          )}
+
+          {/* Cross-session overview lives in the Global tab — no sidebar
+              entry. Sidebar is per-session navigation only. */}
+
+          {hiddenByFilter > 0 && (
+            <button
+              onClick={() => onClearProjectFilter?.()}
+              className="w-full text-left px-3 py-1.5 mb-1 rounded text-[10px] font-mono text-amber-400/80 hover:text-amber-300 hover:bg-[var(--surface-raised)] border border-amber-500/20"
+              title={`Clear project filter "${projectFilter}"`}
+            >
+              +{hiddenByFilter} hidden by filter · clear
+            </button>
+          )}
 
           {filteredSessions.length === 0 ? (
             <div className="px-3 py-4 text-[10px] text-[var(--fg-subtle)] font-mono">
@@ -349,6 +425,7 @@ export default function Shell({
           events={events}
           toolCalls={agentToolCalls}
           onClose={onClearAgent}
+          hideTerminalTab={hideAgentTerminalTab}
         />
       )}
     </div>

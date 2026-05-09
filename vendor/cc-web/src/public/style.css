@@ -1,17 +1,31 @@
 :root {
-    --bg-primary: #0d1117;
-    --bg-secondary: #161b22;
-    --bg-tertiary: #21262d;
-    --text-primary: #f0f6fc;
-    --text-secondary: #8b949e;
-    --accent: #58a6ff;
-    --accent-hover: #4493e0;
-    --success: #3fb950;
-    --error: #f85149;
+    /* TARSA PATCH: align embedded cc-web with Tarsa's palette so the iframe
+       blends in instead of clashing GitHub-blue with Tarsa-teal. */
+    --bg-primary: #08100f;
+    --bg-secondary: #0f1716;
+    --bg-tertiary: #15201f;
+    --text-primary: #f4faf9;
+    --text-secondary: #9ab0ad;
+    --accent: #14b8a6;
+    --accent-hover: #0d8f80;
+    --success: #14b8a6;
+    --error: #f59e0b;        /* amber for danger — matches Tarsa's stuck/error tone */
     --warning: #d29922;
-    --border: #30363d;
-    --border-hover: #484f58;
+    --border: #1f2d2c;
+    --border-hover: #2a3d3b;
     --font-mono: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Consolas', monospace;
+}
+
+/* TARSA PATCH: single-session mode (Tarsa's per-agent Terminal tab). Hide
+   the session tab bar and the "new session" button so the user can't spawn
+   sibling tabs they didn't ask for. The single bound session still works
+   exactly as before. */
+body.tarsa-single #sessionTabsBar,
+body.tarsa-single #tabNewBtn,
+body.tarsa-single #tabsContainer,
+body.tarsa-single #tabOverflowWrapper,
+body.tarsa-single #newSessionBtnMobile {
+    display: none !important;
 }
 
 [data-theme="light"] {

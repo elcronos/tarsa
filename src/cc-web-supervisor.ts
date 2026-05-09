@@ -15,8 +15,10 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,13 +50,7 @@ function findCcWebBin(): string | null {
     path.resolve(__dirname, "../../vendor/cc-web/bin/cc-web.js"),
   ];
   for (const c of candidates) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const fs = require("node:fs");
-      if (fs.existsSync(c)) return c;
-    } catch {
-      /* ignore */
-    }
+    if (fs.existsSync(c)) return c;
   }
   return null;
 }
@@ -93,8 +89,19 @@ export class CcWebSupervisor {
       "--no-open",
     ];
 
-    const child = spawn(process.execPath, args, {
+    // Launch cc-web with cwd = $HOME so its baseFolder validation accepts
+    // any project path under home. Without this, attempts to attach the
+    // terminal to an agent's actual working directory get rejected as
+    // "outside the allowed area".
+    // cc-web depends on node-pty (native, ABI-locked to node). When Tarsa
+    // runs under bun, process.execPath = bun and the child fails to load
+    // node-pty. Honor TARSA_NODE_BIN if set, else fall back to "node" on
+    // PATH, else process.execPath.
+    const nodeBin = process.env["TARSA_NODE_BIN"]
+      || (process.execPath.endsWith("/bun") || process.execPath.endsWith("/bun.exe") ? "node" : process.execPath);
+    const child = spawn(nodeBin, args, {
       stdio: ["ignore", "pipe", "pipe"],
+      cwd: os.homedir(),
       env: { ...process.env, NODE_NO_WARNINGS: "1" },
     });
 
@@ -122,6 +129,44 @@ export class CcWebSupervisor {
   /** Public info safe to expose to the Tarsa frontend. */
   getInfo(): CcWebInfo {
     return { ...this.info };
+  }
+
+  /**
+   * Ask cc-web to create (or reuse) a terminal session bound to a working
+   * directory. Returns the session id cc-web assigned. The Tarsa frontend
+   * uses this so that opening an agent's Terminal tab drops the user into a
+   * shell rooted at that agent's project, instead of vultuk's folder picker.
+   */
+  async createSession(
+    workingDir: string,
+    name?: string
+  ): Promise<{ sessionId: string } | { error: string }> {
+    if (!this.info.enabled || !this.child) {
+      return { error: "cc-web is not running" };
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:${this.info.port}/api/sessions/create`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.info.token}`,
+        },
+        body: JSON.stringify({
+          name: name ?? path.basename(workingDir) ?? "session",
+          workingDir,
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        return { error: `cc-web ${res.status}: ${text.slice(0, 200)}` };
+      }
+      const data = (await res.json()) as { sessionId?: string; id?: string };
+      const sessionId = data.sessionId ?? data.id;
+      if (!sessionId) return { error: "cc-web returned no sessionId" };
+      return { sessionId };
+    } catch (err) {
+      return { error: String(err) };
+    }
   }
 
   stop(): void {

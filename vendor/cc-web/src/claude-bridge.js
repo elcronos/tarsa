@@ -21,9 +21,17 @@ class ClaudeBridge {
 
     for (const cmd of possibleCommands) {
       try {
-        if (fs.existsSync(cmd) || this.commandExists(cmd)) {
+        if (fs.existsSync(cmd)) {
           console.log(`Found Claude command at: ${cmd}`);
           return cmd;
+        }
+        if (this.commandExists(cmd)) {
+          // TARSA PATCH: prefer the resolved absolute path captured by
+          // commandExists so node-pty's posix_spawnp doesn't have to do its
+          // own PATH lookup.
+          const resolved = this._resolved || cmd;
+          console.log(`Found Claude command at: ${resolved}`);
+          return resolved;
         }
       } catch (error) {
         continue;
@@ -36,8 +44,19 @@ class ClaudeBridge {
 
   commandExists(command) {
     try {
-      require('child_process').execFileSync('which', [command], { stdio: 'ignore' });
-      return true;
+      // TARSA PATCH: capture the resolved absolute path. node-pty's
+      // posix_spawnp is fragile when handed a bare command name, especially
+      // when invoked from a child process whose PATH was inherited through
+      // multiple layers (Tarsa → cc-web supervisor → node-pty). Resolving
+      // here means the spawn call gets a real file path.
+      const out = require('child_process')
+        .execFileSync('which', [command], { encoding: 'utf8' })
+        .trim();
+      if (out) {
+        this._resolved = out;
+        return true;
+      }
+      return false;
     } catch (error) {
       return false;
     }

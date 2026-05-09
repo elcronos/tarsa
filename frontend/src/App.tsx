@@ -18,6 +18,8 @@ import SessionHistory from "./components/SessionHistory";
 import TeamView from "./components/TeamView";
 import { isTeamWorker } from "./utils/team";
 import { loadDismissed, addDismissed, removeDismissed } from "./utils/session_storage";
+import { loadProjects, addProject, removeProject, type Project } from "./utils/projects";
+import ProjectTerminal from "./components/ProjectTerminal";
 import type { Session, AgentStatus } from "./types";
 import { ALL_STATUSES, type StatusFilterSet } from "./components/StatusFilter";
 
@@ -39,6 +41,61 @@ export default function App() {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => loadDismissed());
   const [statusFilter, setStatusFilter] = useState<StatusFilterSet>(() => ALL_STATUSES);
   const [projectFilter, setProjectFilter] = useState<string | null>(() => loadProjectFilter());
+  // Tarsa-managed projects (cwds opened via the `+ terminal` flow). Persisted
+  // in localStorage so the sidebar entry survives reloads.
+  const [projects, setProjects] = useState<Project[]>(() => loadProjects());
+  const [selectedProjectCwd, setSelectedProjectCwd] = useState<string | null>(null);
+  // When true, the bottom dock shows vultuk's folder picker instead of an
+  // existing project terminal. Once the user picks a folder, vultuk posts
+  // back via postMessage and we promote it to a real project.
+  const [pendingFolderPicker, setPendingFolderPicker] = useState(false);
+  // Cached cc-web info — reused for both project terminals and the inline
+  // folder picker so we don't refetch on every dock open.
+  const [terminalInfo, setTerminalInfo] = useState<{ enabled: boolean; port: number; token: string } | null>(null);
+  useEffect(() => {
+    if (terminalInfo) return;
+    fetch("/api/terminal/info")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setTerminalInfo(data))
+      .catch(() => null);
+  }, [terminalInfo]);
+  const handleSelectProject = useCallback((cwd: string | null) => {
+    setSelectedProjectCwd(cwd);
+    // Project + session are independent: project drives the docked terminal,
+    // session drives the topology view. Don't clear one when the other
+    // changes — they coexist side-by-side.
+  }, []);
+  const handleRemoveProject = useCallback((cwd: string) => {
+    setProjects((prev) => removeProject(prev, cwd));
+    setSelectedProjectCwd((cur) => (cur === cwd ? null : cur));
+  }, []);
+
+  // Listen for vultuk session-created postMessage. Fires when the user
+  // picks a folder in the inline picker (or in the right-panel agent
+  // terminal). Promotes the folder to a Tarsa project, drops the picker,
+  // and selects the new project so the dock seamlessly shows its terminal.
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const data = e.data as { type?: string; cwd?: string; name?: string };
+      if (!data || data.type !== "tarsa:session-created" || !data.cwd) return;
+      const project = {
+        cwd: data.cwd,
+        name: data.name ?? data.cwd.split("/").pop() ?? "project",
+      };
+      setProjects((prev) => addProject(prev, project));
+      setSelectedProjectCwd(project.cwd);
+      setPendingFolderPicker(false);
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  const handleNewTerminal = useCallback(() => {
+    setPendingFolderPicker(true);
+    // Show the dock immediately by clearing any project so the picker
+    // (rather than an existing terminal) renders.
+    setSelectedProjectCwd(null);
+  }, []);
 
   const handleStatusFilterChange = useCallback((next: StatusFilterSet) => {
     setStatusFilter(next);
@@ -95,6 +152,67 @@ export default function App() {
         };
       })()
     : baseState;
+  // Trim to sessions whose most-recent activity falls inside a recency
+  // window (active OR last_seen within 8h). Used both for the cross-session
+  // Global view and as the fallback "all visible" scope when no session is
+  // selected.
+  const ALL_SESSIONS_RECENCY_MS = 8 * 60 * 60 * 1000; // 8h
+  const recentSessionIds = (() => {
+    if (selectedSessionId) return null; // single session — no extra trim
+    const cutoff = Date.now() - ALL_SESSIONS_RECENCY_MS;
+    const ids = new Set<string>();
+    // last_seen per session = max(agent.last_seen_ms) ?? session.started_at.
+    const perSession = new Map<string, number>();
+    for (const a of baseState.agents.values()) {
+      const cur = perSession.get(a.session_id) ?? 0;
+      if (a.last_seen_ms > cur) perSession.set(a.session_id, a.last_seen_ms);
+    }
+    for (const s of baseState.sessions.values()) {
+      const last = perSession.get(s.id) ?? s.ended_at ?? s.started_at;
+      if (last >= cutoff || s.status === "active") ids.add(s.id);
+    }
+    return ids;
+  })();
+
+  // Cross-session view (Global tab) always uses the recency-trimmed set
+  // regardless of which session is selected in the sidebar.
+  const globalRecentIds = (() => {
+    const cutoff = Date.now() - ALL_SESSIONS_RECENCY_MS;
+    const ids = new Set<string>();
+    const perSession = new Map<string, number>();
+    for (const a of projectFilteredBaseState.agents.values()) {
+      const cur = perSession.get(a.session_id) ?? 0;
+      if (a.last_seen_ms > cur) perSession.set(a.session_id, a.last_seen_ms);
+    }
+    for (const s of projectFilteredBaseState.sessions.values()) {
+      const last = perSession.get(s.id) ?? s.ended_at ?? s.started_at;
+      if (last >= cutoff || s.status === "active") ids.add(s.id);
+    }
+    return ids;
+  })();
+  const globalViewState = {
+    ...projectFilteredBaseState,
+    sessions: new Map(
+      Array.from(projectFilteredBaseState.sessions.entries()).filter(([id]) =>
+        globalRecentIds.has(id),
+      ),
+    ),
+    agents: new Map(
+      Array.from(projectFilteredBaseState.agents.entries()).filter(([, a]) =>
+        globalRecentIds.has(a.session_id),
+      ),
+    ),
+    tool_calls: new Map(
+      Array.from(projectFilteredBaseState.tool_calls.entries()).filter(([id]) => {
+        const a = projectFilteredBaseState.agents.get(id);
+        return a ? globalRecentIds.has(a.session_id) : false;
+      }),
+    ),
+    events: projectFilteredBaseState.events.filter((e) =>
+      globalRecentIds.has(e.session_id),
+    ),
+  };
+
   const displayState = selectedSessionId
     ? {
         ...baseState,
@@ -111,11 +229,32 @@ export default function App() {
         ),
         events: baseState.events.filter((e) => e.session_id === selectedSessionId),
       }
-    : baseState;
+    : recentSessionIds
+      ? {
+          ...baseState,
+          sessions: new Map(
+            Array.from(baseState.sessions.entries()).filter(([id]) => recentSessionIds.has(id)),
+          ),
+          agents: new Map(
+            Array.from(baseState.agents.entries()).filter(
+              ([, a]) => recentSessionIds.has(a.session_id),
+            ),
+          ),
+          tool_calls: new Map(
+            Array.from(baseState.tool_calls.entries()).filter(([id]) => {
+              const a = baseState.agents.get(id);
+              return a ? recentSessionIds.has(a.session_id) : false;
+            }),
+          ),
+          events: baseState.events.filter((e) => recentSessionIds.has(e.session_id)),
+        }
+      : baseState;
 
   const displayEvents = selectedSessionId
     ? events.filter((e) => e.session_id === selectedSessionId)
-    : events;
+    : recentSessionIds
+      ? events.filter((e) => recentSessionIds.has(e.session_id))
+      : events;
 
   const allSessions = Array.from(state.sessions.values()) as Session[];
   // Sessions shown in sidebar (exclude dismissed)
@@ -299,6 +438,7 @@ export default function App() {
         showTeamTab={showTeamTab}
         selectedSessionId={selectedSessionId}
         sessionBudgetUsd={sessionBudgetUsd}
+        onNewTerminal={handleNewTerminal}
       />
 
       {/* Budget exceeded banner */}
@@ -341,8 +481,18 @@ export default function App() {
         toolCalls={displayState.tool_calls}
         agentsBySession={agentsBySession}
         projectFilter={projectFilter}
+        onClearProjectFilter={() => {
+          try { localStorage.removeItem("tarsa.project-filter"); } catch { /* ignore */ }
+          setProjectFilter(null);
+        }}
+        projects={projects}
+        selectedProjectCwd={selectedProjectCwd}
+        onSelectProject={handleSelectProject}
+        onRemoveProject={handleRemoveProject}
+        hideAgentTerminalTab={!!selectedProjectCwd}
       >
         <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0">
           <div className="flex-1 overflow-hidden">
             {activeView === "topology" && (
               <TopologyView
@@ -390,7 +540,7 @@ export default function App() {
             )}
             {activeView === "global" && (
               <GlobalView
-                state={projectFilteredBaseState}
+                state={globalViewState}
                 onSelectAgent={handleSelectAgent}
                 statusFilter={statusFilter}
                 onStatusFilterChange={handleStatusFilterChange}
@@ -409,7 +559,33 @@ export default function App() {
               onClear={clearScrub}
             />
           )}
-        </div>
+          </div>{/* /views column */}
+
+          {/* Bottom dock — same surface for both modes:
+              - Project selected: ProjectTerminal for that cwd.
+              - Folder picker pending: vultuk's folder browser inline. After
+                the user picks, postMessage promotes it to a project and the
+                dock content swaps to the live terminal in the same place. */}
+          {(selectedProjectCwd || pendingFolderPicker) && (
+            <div
+              className="shrink-0 border-t border-[var(--border)] flex flex-col overflow-hidden"
+              // Picker UI needs more vertical room to show its action buttons
+              // (Cancel / Select This Folder) — vultuk's modal is fixed-height
+              // and clips below ~520px. The live terminal is fine at 45%.
+              style={{ height: pendingFolderPicker && !selectedProjectCwd ? "min(640px, 70vh)" : "45%" }}
+            >
+              {selectedProjectCwd ? (() => {
+                const proj = projects.find((p) => p.cwd === selectedProjectCwd);
+                return proj ? <ProjectTerminal cwd={proj.cwd} name={proj.name} /> : null;
+              })() : (
+                <FolderPickerDock
+                  info={terminalInfo}
+                  onClose={() => setPendingFolderPicker(false)}
+                />
+              )}
+            </div>
+          )}
+        </div>{/* /flex-col main */}
       </Shell>
       </ErrorBoundary>
 
@@ -423,6 +599,52 @@ export default function App() {
           onClose={() => setSearchOpen(false)}
         />
       )}
+
     </div>
+  );
+}
+
+/**
+ * FolderPickerDock — renders vultuk's folder browser inline in the bottom
+ * dock when the user clicks `+ terminal`. Same physical surface as the
+ * live project terminal, so the user never sees a popup/modal layer.
+ * vultuk posts back via `tarsa:session-created`; App handles that and
+ * swaps the dock content to a live ProjectTerminal in place.
+ */
+function FolderPickerDock({
+  info,
+  onClose,
+}: {
+  info: { enabled: boolean; port: number; token: string } | null;
+  onClose: () => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--border)] bg-[var(--surface)]">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--accent)]">
+          new terminal · pick or create a folder
+        </span>
+        <button
+          onClick={onClose}
+          className="text-[var(--fg-subtle)] hover:text-[var(--fg)] text-sm px-2"
+          aria-label="Close picker"
+        >
+          ×
+        </button>
+      </div>
+      {info?.enabled && info.token && info.port ? (
+        <iframe
+          title="Folder picker"
+          src={`http://localhost:${info.port}/?token=${encodeURIComponent(info.token)}&action=newproject`}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-clipboard-write"
+          referrerPolicy="no-referrer"
+          className="flex-1 w-full bg-black"
+        />
+      ) : (
+        <div className="flex-1 flex items-center justify-center text-[11px] font-mono text-[var(--fg-subtle)]">
+          Loading picker…
+        </div>
+      )}
+    </>
   );
 }

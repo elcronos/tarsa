@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- TARSA PATCH: prevent token in URL from leaking to third-party CDNs
+         (fonts.googleapis.com, unpkg.com) via the Referer header. Server
+         also sends Referrer-Policy: no-referrer; this is defense-in-depth. -->
+    <meta name="referrer" content="no-referrer">
     <title>Claude Code Web Interface</title>
     
     <!-- PWA Meta Tags -->
@@ -119,14 +123,15 @@
                     <p>Connecting to Claude Code...</p>
                 </div>
                 <div class="start-prompt" id="startPrompt" style="display: none;">
-                    <h2>Choose Your Assistant</h2>
-                    <p>Select one to start in this directory.</p>
+                    <h2>Start Claude in this project</h2>
+                    <p>Choose how to launch Claude Code in this directory.</p>
                     <div class="start-buttons">
                         <button id="startBtn" class="btn btn-primary">Start Claude</button>
                         <button id="dangerousSkipBtn" class="btn btn-danger" title="Dangerously skip permissions. Use with caution.">Dangerous Claude</button>
-                        <button id="startCodexBtn" class="btn btn-primary">Start Codex</button>
-                        <button id="dangerousCodexBtn" class="btn btn-danger" title="Bypass approvals and sandbox. Use with caution.">Dangerous Codex</button>
-                        <button id="startAgentBtn" class="btn btn-primary">Start Cursor</button>
+                        <!-- TARSA PATCH: Codex / Cursor entry points hidden — Tarsa is Claude-only by charter. -->
+                        <button id="startCodexBtn" class="btn btn-primary" style="display:none">Start Codex</button>
+                        <button id="dangerousCodexBtn" class="btn btn-danger" style="display:none">Dangerous Codex</button>
+                        <button id="startAgentBtn" class="btn btn-primary" style="display:none">Start Cursor</button>
                     </div>
                 </div>
                 <div class="error-message" id="errorMessage" style="display: none;">
