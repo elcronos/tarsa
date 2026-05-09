@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import type { Session, Agent, Event, ToolCall } from "../types";
 import { formatDuration } from "../utils/format";
+import { relativeTime } from "../utils/relativeTime";
 import { useNow } from "../hooks/useNow";
 import { projectName, projectColor } from "../utils/project";
 import DetailPanel from "./DetailPanel";
@@ -46,12 +47,14 @@ function SessionItem({
 
   // Compute idle/active label
   const hasActiveAgent = agents.some((a) => a.status === "active");
+  const lastUpdated = agents.length > 0
+    ? Math.max(...agents.map((a) => a.last_seen_ms), session.ended_at ?? 0, session.started_at)
+    : (session.ended_at ?? session.started_at);
   let activityLabel: string;
   if (hasActiveAgent) {
     activityLabel = "active";
   } else if (agents.length > 0) {
-    const maxLastSeen = Math.max(...agents.map((a) => a.last_seen_ms));
-    activityLabel = `idle ${formatDuration(now - maxLastSeen)}`;
+    activityLabel = `idle ${formatDuration(now - lastUpdated)}`;
   } else {
     activityLabel = "idle";
   }
@@ -82,7 +85,7 @@ function SessionItem({
         <div className="mt-0.5 pl-3 text-[10px] text-[var(--fg-subtle)] font-mono">
           {duration}
         </div>
-        <div className="mt-0.5 pl-3 text-[10px] font-mono">
+        <div className="mt-0.5 pl-3 text-[10px] font-mono flex items-center gap-1.5">
           <span
             className={
               hasActiveAgent
@@ -91,6 +94,12 @@ function SessionItem({
             }
           >
             {activityLabel}
+          </span>
+          <span
+            className="text-[var(--fg-subtle)]"
+            title={`Last updated ${new Date(lastUpdated).toLocaleString()}`}
+          >
+            · {relativeTime(lastUpdated, now)}
           </span>
         </div>
       </button>
@@ -225,7 +234,20 @@ export default function Shell({
   }, [showStale]);
 
   // Sort sessions by started_at descending
-  const allSorted = [...sessions].sort((a, b) => b.started_at - a.started_at);
+  // Most-recent activity per session: max of (any agent's last_seen_ms,
+  // session.ended_at, session.started_at). Used both for sort order and the
+  // "updated Xm ago" label so the list always reflects current relevance.
+  const lastUpdatedFor = (s: Session): number => {
+    const ag = agentsBySession?.get(s.id) ?? [];
+    let max = s.ended_at ?? s.started_at;
+    for (const a of ag) {
+      if (a.last_seen_ms > max) max = a.last_seen_ms;
+    }
+    return max;
+  };
+  const allSorted = [...sessions].sort(
+    (a, b) => lastUpdatedFor(b) - lastUpdatedFor(a)
+  );
 
   // A session is "live" only if at least one of its agents is currently
   // running. Idle/awaiting/done sessions are stale background noise from
