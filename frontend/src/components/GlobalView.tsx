@@ -475,10 +475,13 @@ export default function GlobalView({ state, onSelectAgent, statusFilter, onStatu
     return <EmptyState message="No sessions yet" />;
   }
 
-  // Compute counts from full agent list (pre-filter) for StatusFilter chips
+  // Compute counts from renderable agent list (orphan stubs excluded) so the
+  // chip totals match what the user actually sees in the session list.
   const statusCounts = useMemo(() => {
+    const nowMs = Date.now();
     const counts: Partial<Record<import("../types").AgentStatus, number>> = {};
     for (const a of state.agents.values()) {
+      if (isOrphanStub(a, nowMs)) continue;
       counts[a.status] = (counts[a.status] ?? 0) + 1;
     }
     return counts;

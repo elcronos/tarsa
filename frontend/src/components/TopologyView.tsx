@@ -214,10 +214,14 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
     return `${openCall.tool_name} · running for ${elapsed}`;
   }, [hoveredAgentId, state.agents, state.tool_calls, now]);
 
-  // Counts from full (pre-filter) agent list for the StatusFilter chips
+  // Counts from the renderable agent list (pre-status-filter, post-orphan).
+  // Excluding orphan stubs keeps chip totals aligned with what's actually
+  // drawn — otherwise a partially-discovered subagent inflates "running".
   const statusCounts = useMemo(() => {
+    const now = Date.now();
     const counts: Partial<Record<AgentStatus, number>> = {};
     for (const a of state.agents.values()) {
+      if (isOrphanStub(a, now)) continue;
       counts[a.status] = (counts[a.status] ?? 0) + 1;
     }
     return counts;

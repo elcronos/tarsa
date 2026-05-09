@@ -5,6 +5,7 @@ import IOPair from "./IOPair";
 import EmptyState from "./EmptyState";
 import StatusFilter, { type StatusFilterSet } from "./StatusFilter";
 import { summarizeTool } from "../utils/toolSummary";
+import { isOrphanStub } from "../utils/orphan";
 
 interface ReplayViewProps {
   events: Event[];
@@ -268,11 +269,13 @@ export default function ReplayView({
 
   const retrySet = useMemo(() => buildRetrySet(events), [events]);
 
-  // Compute agent status counts (pre-filter) for StatusFilter chips
+  // Compute agent status counts (orphan stubs excluded) for StatusFilter chips
   const statusCounts = useMemo(() => {
     const counts: Partial<Record<AgentStatus, number>> = {};
     if (state) {
+      const nowMs = Date.now();
       for (const a of state.agents.values()) {
+        if (isOrphanStub(a, nowMs)) continue;
         counts[a.status] = (counts[a.status] ?? 0) + 1;
       }
     }
