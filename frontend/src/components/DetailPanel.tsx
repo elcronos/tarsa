@@ -40,12 +40,13 @@ interface DetailPanelProps {
 
 // ── Tab definitions ──────────────────────────────────────────────────────────
 
-type TabId = "trace" | "thread" | "files" | "prompt" | "result";
+type TabId = "trace" | "thread" | "files" | "prompt" | "result" | "terminal";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "trace", label: "Trace" },
   { id: "thread", label: "Thread" },
   { id: "files", label: "Files" },
+  { id: "terminal", label: "Terminal" },
   { id: "prompt", label: "Prompt" },
   { id: "result", label: "Result" },
 ];
@@ -1284,7 +1285,76 @@ export default function DetailPanel({
         {activeTab === "result" && (
           <ResultTab agent={agent} />
         )}
+        {activeTab === "terminal" && (
+          <TerminalTab agent={agent} />
+        )}
       </div>
+    </div>
+  );
+}
+
+function TerminalTab({ agent }: { agent: Agent }) {
+  const [info, setInfo] = useState<{ enabled: boolean; port: number; token: string } | null>(
+    null
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/terminal/info")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data) => {
+        if (!cancelled) setInfo(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (error) {
+    return (
+      <div className="text-[10px] font-mono text-red-400 py-4 text-center">
+        Terminal unavailable: {error}
+      </div>
+    );
+  }
+  if (!info) {
+    return <div className="text-[10px] font-mono text-[var(--fg-subtle)] py-4 text-center">Loading terminal…</div>;
+  }
+  if (!info.enabled) {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)] py-4 text-center">
+        Embedded terminal disabled (TARSA_TERMINAL=0).
+      </div>
+    );
+  }
+
+  // Vendored cc-web runs on the same host on a sibling port. Auth token is
+  // shared with Tarsa at startup so the iframe URL is the only entry point.
+  const url = `http://localhost:${info.port}/?token=${encodeURIComponent(info.token)}`;
+
+  return (
+    <div className="flex flex-col gap-1 h-full">
+      <div className="flex items-center justify-between text-[9px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider">
+        <span>terminal · session {agent.session_id.slice(0, 8)}</span>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="text-[var(--accent)] hover:underline normal-case tracking-normal"
+        >
+          open in new tab ↗
+        </a>
+      </div>
+      <iframe
+        title="Embedded terminal"
+        src={url}
+        className="flex-1 w-full rounded border border-[var(--border)] bg-black"
+        style={{ minHeight: 360 }}
+      />
     </div>
   );
 }

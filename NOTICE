@@ -1,0 +1,9 @@
+Tarsa
+Copyright (c) 2026 Camilo Pestana
+
+This product bundles the following third-party software:
+
+- claude-code-web (MIT)
+  Source: https://github.com/vultuk/claude-code-web
+  Vendored at: vendor/cc-web/
+  License: vendor/cc-web/LICENSE

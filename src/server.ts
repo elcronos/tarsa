@@ -174,6 +174,8 @@ export interface ServerOptions {
   host?: string;
   allowRemote?: boolean;
   authToken?: string;
+  /** Optional embedded-terminal supervisor (vendored cc-web). */
+  ccWeb?: { getInfo(): { enabled: boolean; port: number; token: string } };
 }
 
 export function createApp(opts: ServerOptions): Hono {
@@ -489,6 +491,15 @@ export function createApp(opts: ServerOptions): Hono {
       agentPerformance: agentPerf,
       agentTypeProfiles: typeProfiles,
     });
+  });
+
+  // ── GET /api/terminal/info ──────────────────────────────────────────
+  // Returns the embedded cc-web port and shared auth token so the frontend
+  // can mount the in-browser terminal in an iframe. Returns enabled=false
+  // when the supervisor isn't configured (e.g. cc-web not vendored).
+  app.get("/api/terminal/info", (c) => {
+    if (!opts.ccWeb) return c.json({ enabled: false });
+    return c.json(opts.ccWeb.getInfo());
   });
 
   // ── GET /api/search?q= ──────────────────────────────────────────────

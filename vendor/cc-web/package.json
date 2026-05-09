@@ -1,0 +1,47 @@
+{
+  "name": "claude-code-web",
+  "version": "3.4.0",
+  "description": "Web-based interface for Claude Code CLI accessible via browser",
+  "main": "src/server.js",
+  "bin": {
+    "cc-web": "./bin/cc-web.js"
+  },
+  "scripts": {
+    "start": "node bin/cc-web.js",
+    "dev": "node bin/cc-web.js --dev",
+    "test": "mocha test/*.test.js",
+    "release:pr": "bash scripts/release-pr.sh"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "web",
+    "terminal",
+    "browser",
+    "remote",
+    "ai"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "cors": "^2.8.5",
+    "@ngrok/ngrok": "^1.4.0",
+    "express": "^4.19.2",
+    "node-pty": "^1.0.0",
+    "open": "^10.1.0",
+    "uuid": "^10.0.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vultuk/claude-code-web.git"
+  },
+  "homepage": "https://github.com/vultuk/claude-code-web#readme",
+  "devDependencies": {
+    "mocha": "^11.7.1"
+  }
+}

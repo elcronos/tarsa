@@ -12,6 +12,9 @@
     "test": "vitest run",
     "lint": "tsc --noEmit"
   },
+  "workspaces": [
+    "vendor/cc-web"
+  ],
   "dependencies": {
     "@hono/node-server": "^1.13.0",
     "better-sqlite3": "^11.5.0",

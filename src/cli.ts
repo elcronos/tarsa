@@ -15,6 +15,7 @@ import { installHooks, uninstallHooks, upgradeHooks, JSONL_PATH } from "./hooks.
 import { migrateLegacyDbIfPresent } from "./migrations.js";
 import { cwdFromTranscriptPath } from "./transcript.js";
 import { tailJsonl } from "./tailer.js";
+import { CcWebSupervisor } from "./cc-web-supervisor.js";
 import { EventProcessor } from "./processor.js";
 import { detectRuntime, isBun } from "./runtime.js";
 import { openDatabase, setDb } from "./db.js";
@@ -275,8 +276,15 @@ async function main(): Promise<void> {
     process.stderr.write(`[tarsa] Auth token: ${tokenPath}\n`);
   }
 
+  // Start the embedded terminal supervisor (vendored cc-web). Disabled by
+  // setting TARSA_TERMINAL=0 — useful for users who don't want node-pty.
+  const ccWeb = new CcWebSupervisor({
+    enabled: process.env["TARSA_TERMINAL"] !== "0",
+  });
+  ccWeb.start();
+
   // Start HTTP server
-  const server = await startServer({ port: opts.port, processor, db, host: opts.host, allowRemote: opts.allowRemote, authToken });
+  const server = await startServer({ port: opts.port, processor, db, host: opts.host, allowRemote: opts.allowRemote, authToken, ccWeb });
   const host = opts.host === "0.0.0.0" ? "localhost" : opts.host;
   const baseUrl = `http://${host}:${opts.port}`;
   const url = opts.allowRemote && authToken ? `${baseUrl}?token=${authToken}` : baseUrl;
@@ -299,6 +307,7 @@ async function main(): Promise<void> {
     console.log("\n[tarsa] Shutting down...");
     processor.stopIdleCheck();
     controller.abort();
+    ccWeb.stop();
     server.close();
     db.close();
     process.exit(0);
