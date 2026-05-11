@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import type { State, Session, Agent } from "../types";
 import { formatDuration, formatTime } from "../utils/format";
 import { typeColor, STATUS_COLORS } from "../utils/colors";
@@ -14,6 +14,8 @@ interface GlobalViewProps {
   statusFilter: StatusFilterSet;
   onStatusFilterChange: (next: StatusFilterSet) => void;
   selectedAgentId?: string | null;
+  selectedSessionId?: string | null;
+  onSelectSession?: (id: string | null) => void;
 }
 
 // ── Layout constants ────────────────────────────────────────────────────────
@@ -389,6 +391,8 @@ function SessionCard({
   now,
   defaultExpanded,
   selectedAgentId,
+  isSelected = false,
+  onSelectSession,
 }: {
   session: Session;
   agents: Agent[];
@@ -396,8 +400,18 @@ function SessionCard({
   now: number;
   defaultExpanded: boolean;
   selectedAgentId?: string | null;
+  isSelected?: boolean;
+  onSelectSession?: (id: string | null) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  // Expand + scroll the selected card into view when the user picks it from
+  // the sidebar so it surfaces inside the (potentially scrolled) Global list.
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!isSelected) return;
+    setExpanded(true);
+    cardRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [isSelected]);
   const name = session.name ?? `Session ${session.id.slice(0, 8)}`;
   const duration = session.ended_at
     ? formatDuration(session.ended_at - session.started_at)
@@ -408,11 +422,21 @@ function SessionCard({
   const hiddenCount = agents.length - visibleAgents.length;
 
   return (
-    <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[var(--surface)]">
-      {/* Card header — click to toggle expansion */}
+    <div
+      ref={cardRef}
+      className={`border rounded-lg overflow-hidden bg-[var(--surface)] transition-colors ${
+        isSelected
+          ? "border-emerald-500/60 ring-1 ring-emerald-500/40"
+          : "border-[var(--border)]"
+      }`}
+    >
+      {/* Card header — click to toggle expansion (and pin selection) */}
       <div
         className="flex items-center gap-3 px-4 py-2.5 bg-[var(--surface-raised)] cursor-pointer select-none hover:bg-[var(--surface-raised)]/80 transition-colors"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => {
+          setExpanded((v) => !v);
+          if (onSelectSession) onSelectSession(session.id);
+        }}
       >
         {/* Expand chevron */}
         <span className="text-[var(--fg-subtle)] text-[10px] font-mono shrink-0 w-3">
@@ -457,7 +481,7 @@ function SessionCard({
 }
 
 // ── GlobalView ───────────────────────────────────────────────────────────────
-export default function GlobalView({ state, onSelectAgent, statusFilter, onStatusFilterChange, selectedAgentId }: GlobalViewProps) {
+export default function GlobalView({ state, onSelectAgent, statusFilter, onStatusFilterChange, selectedAgentId, selectedSessionId, onSelectSession }: GlobalViewProps) {
   const SHOW_STALE_KEY = "tarsa.showStale";
   const [showStale, setShowStale] = useState<boolean>(() => {
     try { return localStorage.getItem(SHOW_STALE_KEY) === "true"; } catch { return false; }
@@ -471,10 +495,6 @@ export default function GlobalView({ state, onSelectAgent, statusFilter, onStatu
     (a, b) => b.started_at - a.started_at
   );
 
-  if (sessions.length === 0) {
-    return <EmptyState message="No sessions yet" />;
-  }
-
   // Compute counts from renderable agent list (orphan stubs excluded) so the
   // chip totals match what the user actually sees in the session list.
   const statusCounts = useMemo(() => {
@@ -487,20 +507,26 @@ export default function GlobalView({ state, onSelectAgent, statusFilter, onStatu
     return counts;
   }, [state.agents]);
 
+  if (sessions.length === 0) {
+    return <EmptyState message="No sessions yet" />;
+  }
+
   // Per-session agent list (orphan stubs excluded)
   const sessionAgents = (sid: string) =>
     Array.from(state.agents.values()).filter(
       (a) => a.session_id === sid && !isOrphanStub(a, now)
     );
 
-  const liveSessions = sessions.filter((s) => {
+  // Match Shell sidebar's isLive: live iff session.status === "active" OR at
+  // least one non-orphan agent is active. Keeps the cross-session view in
+  // sync with the sidebar so users see the same set in both places.
+  const isLive = (s: Session): boolean => {
+    if (s.status === "active") return true;
     const sa = sessionAgents(s.id);
-    return sa.length > 0 && sa.some((a) => a.status === "active");
-  });
-  const staleSessions = sessions.filter((s) => {
-    const sa = sessionAgents(s.id);
-    return sa.length > 0 && !sa.some((a) => a.status === "active");
-  });
+    return sa.some((a) => a.status === "active");
+  };
+  const liveSessions = sessions.filter(isLive);
+  const staleSessions = sessions.filter((s) => !isLive(s));
 
   const visibleSessions = showStale ? [...liveSessions, ...staleSessions] : liveSessions;
 
@@ -543,8 +569,11 @@ export default function GlobalView({ state, onSelectAgent, statusFilter, onStatu
               (a) => a.session_id === session.id && !isOrphanStub(a, now) && statusFilter.has(a.status)
             );
             const isActive = session.status === "active";
+            const isSelected = selectedSessionId === session.id;
             let defaultExpanded = false;
-            if (isActive && activeExpanded < 2) {
+            if (isSelected) {
+              defaultExpanded = true;
+            } else if (isActive && activeExpanded < 2) {
               defaultExpanded = true;
               activeExpanded++;
             }
@@ -557,6 +586,8 @@ export default function GlobalView({ state, onSelectAgent, statusFilter, onStatu
                 now={now}
                 defaultExpanded={defaultExpanded}
                 selectedAgentId={selectedAgentId}
+                isSelected={isSelected}
+                onSelectSession={onSelectSession}
               />
             );
           })}

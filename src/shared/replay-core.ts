@@ -755,9 +755,13 @@ export function handleStop(s: State, e: Event): State {
 
   if (isIdleStop) {
     let next = setSession(s, sessionId, { ...session, status: "complete", ended_at: tsMs });
-    const root = next.agents.get(rootId);
-    if (root) {
-      next = setAgent(next, rootId, { ...root, status: "done", last_seen_ms: tsMs });
+    // Sweep every agent of this session to "done". SubagentStop hooks are
+    // unreliable in Claude Code, so sub-agents can otherwise linger as
+    // "active" indefinitely and falsely register the session as live.
+    for (const [aid, a] of next.agents) {
+      if (a.session_id !== sessionId) continue;
+      if (a.status === "done" || a.status === "error") continue;
+      next = setAgent(next, aid, { ...a, status: "done", last_seen_ms: tsMs });
     }
     return next;
   }

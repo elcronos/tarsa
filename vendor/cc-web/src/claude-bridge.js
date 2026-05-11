@@ -70,6 +70,7 @@ class ClaudeBridge {
     const {
       workingDir = process.cwd(),
       dangerouslySkipPermissions = false,
+      resumeSessionId = null,
       onOutput = () => {},
       onExit = () => {},
       onError = () => {},
@@ -87,6 +88,12 @@ class ClaudeBridge {
       }
 
       const args = dangerouslySkipPermissions ? ['--dangerously-skip-permissions'] : [];
+      // TARSA PATCH: --resume <id> when Tarsa requests resuming a known
+      // Claude Code session. Validate UUID-shape so the id can't smuggle
+      // extra argv tokens into the claude CLI.
+      if (resumeSessionId && /^[A-Za-z0-9._-]{1,128}$/.test(resumeSessionId)) {
+        args.push('--resume', resumeSessionId);
+      }
       const claudeProcess = spawn(this.claudeCommand, args, {
         cwd: workingDir,
         env: {

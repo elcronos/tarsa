@@ -202,8 +202,8 @@ export function createApp(opts: ServerOptions): Hono {
 
   // In remote mode, Authorization header is also allowed (for bearer token auth)
   const allowHeaders = allowRemote
-    ? ["X-Claudelens-CSRF", "Authorization"]
-    : ["X-Claudelens-CSRF"];
+    ? ["X-Tarsa-CSRF", "Authorization"]
+    : ["X-Tarsa-CSRF"];
 
   app.use(
     "*",
@@ -340,10 +340,10 @@ export function createApp(opts: ServerOptions): Hono {
   });
 
   // ── POST /api/budget ─────────────────────────────────────────────────
-  // CSRF-protected; requires X-Claudelens-CSRF header with a valid token
+  // CSRF-protected; requires X-Tarsa-CSRF header with a valid token
   // issued via the SSE stream. Rate-limited to 60 POSTs/min per connection.
   app.post("/api/budget", async (c) => {
-    const token = c.req.header("X-Claudelens-CSRF");
+    const token = c.req.header("X-Tarsa-CSRF");
     if (!token) {
       return c.json({ error: "Missing CSRF token" }, 403);
     }
@@ -626,10 +626,37 @@ export function createApp(opts: ServerOptions): Hono {
     if (!agent) return c.json({ error: "Agent not found" }, 404);
     const session = processor.state.sessions.get(agent.session_id);
     if (!session) return c.json({ error: "Session not found" }, 404);
+    // claudeSessionId is returned only when a Claude Code transcript still
+    // exists for this session. The Terminal tab uses it to spawn cc-web's
+    // claude with `--resume <id>` so the embedded shell reopens the same
+    // conversation instead of starting fresh.
+    let claudeSessionId: string | null = null;
+    if (session.cwd) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const fs = require("node:fs") as typeof import("node:fs");
+        const os = require("node:os") as typeof import("node:os");
+        const path = require("node:path") as typeof import("node:path");
+        const encoded = session.cwd.replace(/\//g, "-");
+        const transcript = path.join(
+          os.homedir(),
+          ".claude",
+          "projects",
+          encoded,
+          `${session.id}.jsonl`,
+        );
+        if (fs.existsSync(transcript)) {
+          claudeSessionId = session.id;
+        }
+      } catch {
+        /* best-effort */
+      }
+    }
     return c.json({
       id: session.id,
       cwd: session.cwd ?? null,
       name: session.name ?? null,
+      claudeSessionId,
     });
   });
 

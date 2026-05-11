@@ -34,7 +34,7 @@ function readSessionFromUrl(): string | null {
 export default function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(() => readSessionFromUrl());
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState("topology");
+  const [activeView, setActiveView] = useState("global");
   const [searchOpen, setSearchOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
@@ -174,44 +174,10 @@ export default function App() {
     return ids;
   })();
 
-  // Cross-session view (Global tab) always uses the recency-trimmed set
-  // regardless of which session is selected in the sidebar.
-  const globalRecentIds = (() => {
-    const cutoff = Date.now() - ALL_SESSIONS_RECENCY_MS;
-    const ids = new Set<string>();
-    const perSession = new Map<string, number>();
-    for (const a of projectFilteredBaseState.agents.values()) {
-      const cur = perSession.get(a.session_id) ?? 0;
-      if (a.last_seen_ms > cur) perSession.set(a.session_id, a.last_seen_ms);
-    }
-    for (const s of projectFilteredBaseState.sessions.values()) {
-      const last = perSession.get(s.id) ?? s.ended_at ?? s.started_at;
-      if (last >= cutoff || s.status === "active") ids.add(s.id);
-    }
-    return ids;
-  })();
-  const globalViewState = {
-    ...projectFilteredBaseState,
-    sessions: new Map(
-      Array.from(projectFilteredBaseState.sessions.entries()).filter(([id]) =>
-        globalRecentIds.has(id),
-      ),
-    ),
-    agents: new Map(
-      Array.from(projectFilteredBaseState.agents.entries()).filter(([, a]) =>
-        globalRecentIds.has(a.session_id),
-      ),
-    ),
-    tool_calls: new Map(
-      Array.from(projectFilteredBaseState.tool_calls.entries()).filter(([id]) => {
-        const a = projectFilteredBaseState.agents.get(id);
-        return a ? globalRecentIds.has(a.session_id) : false;
-      }),
-    ),
-    events: projectFilteredBaseState.events.filter((e) =>
-      globalRecentIds.has(e.session_id),
-    ),
-  };
+  // Global tab uses the full project-filtered state. GlobalView itself
+  // splits live vs. stale and exposes a toggle, so trimming here would
+  // de-sync the cross-session view from the sidebar's session list.
+  const globalViewState = projectFilteredBaseState;
 
   const displayState = selectedSessionId
     ? {
@@ -545,6 +511,8 @@ export default function App() {
                 statusFilter={statusFilter}
                 onStatusFilterChange={handleStatusFilterChange}
                 selectedAgentId={selectedAgentId}
+                selectedSessionId={selectedSessionId}
+                onSelectSession={handleSelectSession}
               />
             )}
           </div>

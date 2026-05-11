@@ -1308,12 +1308,13 @@ function TerminalTab({ agent }: { agent: Agent }) {
   const [info, setInfo] = useState<{ enabled: boolean; port: number; token: string } | null>(
     null
   );
-  const [sessionInfo, setSessionInfo] = useState<{ cwd: string | null; name: string | null } | null>(
+  const [sessionInfo, setSessionInfo] = useState<{ cwd: string | null; name: string | null; claudeSessionId: string | null } | null>(
     null
   );
   const [ensureStatus, setEnsureStatus] = useState<"idle" | "ensuring" | "ready" | "error">(
     "idle"
   );
+  const [ccSessionId, setCcSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // 1. Fetch cc-web port + token (one-shot, no agent dep).
@@ -1339,10 +1340,14 @@ function TerminalTab({ agent }: { agent: Agent }) {
     fetch(`/api/agent/${encodeURIComponent(agent.id)}/session`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((data) => {
-        if (!cancelled) setSessionInfo({ cwd: data.cwd ?? null, name: data.name ?? null });
+        if (!cancelled) setSessionInfo({
+          cwd: data.cwd ?? null,
+          name: data.name ?? null,
+          claudeSessionId: data.claudeSessionId ?? null,
+        });
       })
       .catch(() => {
-        if (!cancelled) setSessionInfo({ cwd: null, name: null });
+        if (!cancelled) setSessionInfo({ cwd: null, name: null, claudeSessionId: null });
       });
     return () => {
       cancelled = true;
@@ -1360,14 +1365,17 @@ function TerminalTab({ agent }: { agent: Agent }) {
     }
     let cancelled = false;
     setEnsureStatus("ensuring");
+    setCcSessionId(null);
     fetch("/api/terminal/ensure-session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cwd: sessionInfo.cwd, name: sessionInfo.name ?? undefined }),
     })
       .then((r) => (r.ok ? r.json() : r.json().then((d) => Promise.reject(new Error(d.error ?? `HTTP ${r.status}`)))))
-      .then(() => {
-        if (!cancelled) setEnsureStatus("ready");
+      .then((data: { sessionId?: string }) => {
+        if (cancelled) return;
+        if (data?.sessionId) setCcSessionId(data.sessionId);
+        setEnsureStatus("ready");
       })
       .catch((err) => {
         if (cancelled) return;
@@ -1403,7 +1411,11 @@ function TerminalTab({ agent }: { agent: Agent }) {
 
   // ?single=1 tells the patched cc-web to hide its session tab bar so the
   // user can't spawn extra sessions from the agent-scoped right panel.
-  const url = `http://localhost:${info.port}/?token=${encodeURIComponent(info.token)}&single=1`;
+  const url = `http://localhost:${info.port}/?token=${encodeURIComponent(info.token)}&single=1${
+    ccSessionId ? `&session=${encodeURIComponent(ccSessionId)}` : ""
+  }${
+    sessionInfo.claudeSessionId ? `&resume=${encodeURIComponent(sessionInfo.claudeSessionId)}` : ""
+  }`;
 
   return (
     <div className="flex flex-col gap-1 h-full">
