@@ -2,6 +2,29 @@ const { spawn } = require('node-pty');
 const path = require('path');
 const fs = require('fs');
 
+// node-pty prebuilds ship a spawn-helper binary that must be executable.
+// npm/yarn/pnpm sometimes strip the execute bit during install (especially in
+// monorepos or when node_modules is copied between machines). Fix all
+// executables in the platform-specific prebuilds dir so posix_spawnp works.
+(function fixNodePtyPrebuilds() {
+  if (process.platform === 'win32') return; // Windows doesn't use posix_spawnp
+  try {
+    const ptyPath = path.dirname(require.resolve('node-pty/package.json'));
+    const prebuildDir = path.join(ptyPath, 'prebuilds', `${process.platform}-${process.arch}`);
+    if (!fs.existsSync(prebuildDir)) return;
+    for (const file of fs.readdirSync(prebuildDir)) {
+      if (file.endsWith('.node')) continue; // .node files don't need +x
+      const filePath = path.join(prebuildDir, file);
+      const stat = fs.statSync(filePath);
+      if (!stat.isFile()) continue;
+      if (!(stat.mode & fs.constants.S_IXUSR)) {
+        fs.chmodSync(filePath, stat.mode | 0o755);
+        console.log(`[cc-web] Fixed execute permission on ${filePath}`);
+      }
+    }
+  } catch (_) { /* best-effort */ }
+})();
+
 class ClaudeBridge {
   constructor() {
     this.sessions = new Map();
