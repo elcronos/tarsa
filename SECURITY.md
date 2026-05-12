@@ -51,11 +51,11 @@ Hono decodes the URL path once; the handler does **not** call
 Any web page the user visits can issue no-cors POST requests to
 `localhost:8100` — this is a real browser-tab threat even on loopback. To
 mitigate this, `POST /api/budget` (and future state-changing endpoints) require
-an `X-Claudelens-CSRF` header containing a token issued by the SSE stream:
+an `X-Tarsa-CSRF` header containing a token issued by the SSE stream:
 
 1. When a browser tab opens the SSE stream, the server generates a
    `crypto.randomBytes(16)` token and sends it as the first SSE event.
-2. The browser stores this token and includes it in the `X-Claudelens-CSRF`
+2. The browser stores this token and includes it in the `X-Tarsa-CSRF`
    header on every mutation request.
 3. Tokens are scoped per SSE connection and cleaned up on disconnect.
 4. Each connection is rate-limited to 60 budget POSTs per minute.
@@ -69,6 +69,25 @@ identity.
 The server accepts at most **32** concurrent SSE connections. A 33rd connection
 is rejected with HTTP 429. This prevents unbounded memory growth from stale
 browser tabs or HMR reconnection loops.
+
+### Remote auth token caveat
+
+When `--allow-remote` is used, the auto-opened browser URL embeds the bearer
+token as a query string (`?token=<hex>`). Query strings leak into browser
+history, referrer headers, server access logs, and reverse-proxy logs. Treat
+the URL as sensitive: do not share it, do not paste it into chat tools, and
+prefer a private browser profile when working remotely. Rotate the token by
+restarting the server (`rm ~/.tarsa/token` first to force regeneration).
+
+### Embedded terminal (cc-web)
+
+The optional Terminal tab runs vendored `cc-web` (MIT) as a sibling subprocess
+on port 8101 bound to `127.0.0.1`. cc-web spawns `claude` inside its own pty;
+PTY I/O never enters the Tarsa Node/Bun process. Disable with
+`TARSA_TERMINAL=0`. The iframe is sandboxed
+(`allow-scripts allow-same-origin allow-forms allow-clipboard-write`) and
+the cc-web auth token is passed as a URL query param subject to the same
+leakage caveats as the remote-auth token above.
 
 ---
 

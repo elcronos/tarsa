@@ -24,7 +24,7 @@ function deserializeState(s: SerializedState, events: Event[]): State {
 export type ConnectionStatus = "connecting" | "live" | "error";
 
 // Module-level CSRF token captured from the SSE event stream. POST endpoints
-// like /api/budget require this token in the X-Claudelens-CSRF header.
+// like /api/budget require this token in the X-Tarsa-CSRF header.
 let _csrfToken: string | null = null;
 
 export function getCsrfToken(): string | null {

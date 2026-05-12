@@ -574,7 +574,7 @@ function BudgetCard({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Claudelens-CSRF": token,
+          "X-Tarsa-CSRF": token,
           ...authHeaders(),
         },
         body: JSON.stringify({

@@ -4,8 +4,8 @@
 
 - **All hooks must have `"async": true`** — blocking hooks kill Claude Code sessions
 - **SubagentStart/SubagentStop hooks are unreliable** — auto-discover agents from `agent_id` field on PreToolUse/PostToolUse events
-- **Don't break existing agentpeek hooks** — Tarsa uses `/tmp/tarsa.jsonl` (distinct from `/tmp/agentpeek.jsonl`)
-- **Hook marker**: `tarsa.jsonl` — never touch entries containing `agentpeek.jsonl`
+- **Don't break existing agentpeek hooks** — Tarsa appends events to `~/.tarsa/events.jsonl` (legacy `/tmp/tarsa.jsonl` migrated on first run; distinct from `/tmp/agentpeek.jsonl`)
+- **Hook marker**: `tarsa --append-event` — never touch hook entries containing `agentpeek.jsonl`
 - **Port**: 8100 — avoid 8099 collision with agentpeek
 
 ## Code Style

@@ -3,12 +3,40 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Real-time Claude Code agent observability tool",
+  "author": "Camilo Pestana",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elcronos/tarsa.git"
+  },
+  "homepage": "https://github.com/elcronos/tarsa#readme",
+  "bugs": {
+    "url": "https://github.com/elcronos/tarsa/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "observability",
+    "agents",
+    "hooks",
+    "telemetry",
+    "dashboard"
+  ],
+  "files": [
+    "bin",
+    "src",
+    "vendor/cc-web",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "SECURITY.md"
+  ],
   "bin": {
     "tarsa": "./bin/tarsa.mjs"
   },
   "scripts": {
     "dev": "tsx src/cli.ts",
-    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "build": "cd frontend && npm install && npm run build",
     "test": "vitest run",
     "lint": "tsc --noEmit"
   },

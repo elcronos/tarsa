@@ -6,8 +6,6 @@ Live observability for Claude Code agent sessions. Topology, timeline, tool I/O,
   <img src="docs/banner.svg" alt="Tarsa" width="720" />
 </p>
 
-<!-- TODO: add animated demo GIF below banner -->
-
 ## Quick Start
 
 Requires Node 20+ or Bun 1.x.
@@ -39,7 +37,8 @@ First run installs hooks into `~/.claude/settings.json` and opens `http://localh
 - **Detail panel** — per-agent tabs: trace, transcript thread, files touched, prompt, result. Cost provenance badge (measured vs estimated). Optional LLM-generated 1-sentence prompt summary via local `claude --model haiku`.
 - **Time-travel scrubber** — drag through session history; state derived via pure reducer.
 - **Session diff** — side-by-side compare two sessions; agent matching by `(subagent_type, depth, sibling_order)`.
-- **Global view** — all sessions at once, mini-DAG per session, filter stale/live.
+- **Global view** — default view; all sessions at once, mini-DAG per session, filter stale/live.
+- **Embedded terminal** — optional per-agent Terminal tab backed by vendored cc-web (MIT). Resumes the agent's actual Claude Code session via `claude --resume <id>` when a transcript exists; otherwise spawns a fresh claude in the same cwd. Disable with `TARSA_TERMINAL=0`.
 - **Subagent dedup** — Agent-tool pre-create stub migrates onto the real `agent_id` when SubagentStart fires; subagent re-parenting attaches subagent processes to their spawning session.
 - **Team detection** — `worker-*` and `team-*` subagent types render with team badges and orange edges.
 
@@ -61,7 +60,7 @@ First run installs hooks into `~/.claude/settings.json` and opens `http://localh
 
 ```
 Claude Code hooks
-  → tarsa --append-event → /tmp/tarsa.jsonl
+  → tarsa --append-event → ~/.tarsa/events.jsonl (mode 0600)
         ↓ tail
   src/tailer.ts        adaptive-poll JSONL tailer
   src/processor.ts     append-only event log + structural-sharing reducer
@@ -76,9 +75,10 @@ Claude Code hooks
 ```
 
 State locations:
-- Event log: `/tmp/tarsa.jsonl`
+- Event log: `~/.tarsa/events.jsonl` (mode 0600; legacy `/tmp/tarsa.jsonl` migrated on first run)
 - DB: `~/.tarsa/history.db` (sessions, agents, tool_calls, events, baselines)
-- Hooks: `~/.claude/settings.json` (entries marked with `tarsa.jsonl`)
+- Remote auth token (only with `--allow-remote`): `~/.tarsa/token` (mode 0600)
+- Hooks: `~/.claude/settings.json` (entries marked with `tarsa --append-event`)
 
 ## Why Tarsa
 
@@ -96,7 +96,7 @@ No. Tarsa is Claude Code only. The hook system it relies on is specific to Claud
 
 **Q: Does it slow down my Claude Code sessions?**
 
-No. Hooks write a JSON line to `/tmp/tarsa.jsonl` and exit. The append is non-blocking and adds no latency to the agent session itself.
+No. Hooks write a JSON line to `~/.tarsa/events.jsonl` and exit. The append is non-blocking and adds no latency to the agent session itself.
 
 **Q: Is my data sent anywhere?**
 
@@ -157,9 +157,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contributor guide.
 
 ## Roadmap
 
-- **tarsa-shell** — a sister project for users who want an in-browser terminal. Tarsa itself will not embed a PTY (see [ADR-0004](docs/adr/0004-no-in-process-pty.md)); `tarsa-shell` will explore xterm.js + WebSocket relay as a separate, opt-in package.
 - Session sharing / export.
 - More baseline metrics (p95 tool latency, error rate by agent type).
+- See [ADR-0007](docs/adr/0007-embed-cc-web-as-terminal.md) for the decision to vendor cc-web as the embedded Terminal (supersedes ADR-0004).
 
 ## Limitations
 

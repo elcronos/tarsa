@@ -124,11 +124,19 @@ class ClaudeCodeWebInterface {
         // Check if there are existing sessions
         console.log('[Init] Checking sessions, tabs.size:', this.sessionTabManager.tabs.size);
         if (this.sessionTabManager.tabs.size > 0) {
-            console.log('[Init] Found sessions, switching to first tab...');
-            // Sessions exist - switch to the first one (this will handle connecting)
-            const firstTabId = this.sessionTabManager.tabs.keys().next().value;
-            console.log('[Init] Switching to tab:', firstTabId);
-            await this.sessionTabManager.switchToTab(firstTabId);
+            // TARSA PATCH: when embedded with ?session=<id>, prefer that tab
+            // over the first one. Lets Tarsa deeplink each agent's Terminal
+            // tab to the matching cc-web session instead of always landing
+            // on the oldest one.
+            let requestedSession = null;
+            try {
+                requestedSession = new URLSearchParams(window.location.search).get('session');
+            } catch (_) { /* best-effort */ }
+            const targetTabId = (requestedSession && this.sessionTabManager.tabs.has(requestedSession))
+                ? requestedSession
+                : this.sessionTabManager.tabs.keys().next().value;
+            console.log('[Init] Switching to tab:', targetTabId);
+            await this.sessionTabManager.switchToTab(targetTabId);
             
             // Hide overlay completely since we have sessions
             console.log('[Init] About to hide overlay');
@@ -737,6 +745,12 @@ class ClaudeCodeWebInterface {
                     if (isNewSession) {
                         console.log('[session_joined] New session detected, showing start prompt');
                         this.showOverlay('startPrompt');
+                        // TARSA PATCH: in single-session mode, auto-start Claude
+                        // so the embedded per-agent Terminal tab lands directly
+                        // in a usable claude session instead of a blank shell.
+                        if (document.body.classList.contains('tarsa-single')) {
+                            setTimeout(() => this.startClaudeSession(), 250);
+                        }
                     } else {
                         console.log('[session_joined] Existing session with stopped Claude, showing restart prompt');
                         // For existing sessions where Claude has stopped, show start prompt
@@ -900,10 +914,22 @@ class ClaudeCodeWebInterface {
     }
 
     startClaudeSession(options = {}) {
+        // TARSA PATCH: when embedded with ?resume=<claude-session-id>, ask
+        // claude to resume that session so the embedded terminal lands inside
+        // the agent's actual conversation instead of a fresh one. Sent once,
+        // then cleared so a later manual restart doesn't keep replaying it.
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const resumeId = params.get('resume');
+            if (resumeId && !this._tarsaResumeUsed) {
+                options = { ...options, resumeSessionId: resumeId };
+                this._tarsaResumeUsed = true;
+            }
+        } catch (_) { /* best-effort */ }
         // If no session, create one first
         if (!this.currentClaudeSessionId) {
             const sessionName = `Session ${new Date().toLocaleString()}`;
-            this.send({ 
+            this.send({
                 type: 'create_session',
                 name: sessionName,
                 workingDir: this.selectedWorkingDir

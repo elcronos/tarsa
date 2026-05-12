@@ -1,6 +1,12 @@
 # ADR-0004: No In-Process PTY
 
-**Status:** Accepted
+**Status:** Superseded by [ADR-0007](0007-embed-cc-web-as-terminal.md)
+
+> The original decision (rejecting in-process PTY in favor of `POST /api/spawn`
+> + tmux) is preserved below for historical context. The current
+> implementation vendors cc-web as a *sibling subprocess* — PTY I/O still
+> does not live inside the Tarsa Node/Bun process, so the isolation goal
+> is preserved while gaining an in-browser terminal UX. See ADR-0007.
 
 ## Context
 

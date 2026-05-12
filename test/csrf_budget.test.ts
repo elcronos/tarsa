@@ -2,7 +2,7 @@
  * CSRF protection tests for POST /api/budget — Block B
  *
  * Acceptance criteria:
- *  1. POST without X-Claudelens-CSRF → 403
+ *  1. POST without X-Tarsa-CSRF → 403
  *  2. POST with valid token from SSE → 200
  *  3. Reusing same token → still 200 (tokens are per-connection, not single-use per spec)
  *  4. Token from a different string (forged) → 403
@@ -67,7 +67,7 @@ async function getCsrfToken(
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe("CSRF: POST /api/budget", () => {
-  it("returns 403 when no X-Claudelens-CSRF header", async () => {
+  it("returns 403 when no X-Tarsa-CSRF header", async () => {
     const app = createApp(makeOpts());
     const res = await app.fetch(
       new Request("http://localhost/api/budget", {
@@ -86,7 +86,7 @@ describe("CSRF: POST /api/budget", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Claudelens-CSRF": "deadbeefdeadbeefdeadbeefdeadbeef",
+          "X-Tarsa-CSRF": "deadbeefdeadbeefdeadbeefdeadbeef",
         },
         body: JSON.stringify({ session_id: "s1", usd: 5 }),
       })
@@ -103,7 +103,7 @@ describe("CSRF: POST /api/budget", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Claudelens-CSRF": token,
+          "X-Tarsa-CSRF": token,
         },
         body: JSON.stringify({ session_id: "s1", usd: 5 }),
       })
@@ -122,7 +122,7 @@ describe("CSRF: POST /api/budget", () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Claudelens-CSRF": token,
+            "X-Tarsa-CSRF": token,
           },
           body: JSON.stringify({ session_id: "s1", usd: i + 1 }),
         })
@@ -143,7 +143,7 @@ describe("CSRF: POST /api/budget", () => {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-Claudelens-CSRF": token,
+            "X-Tarsa-CSRF": token,
           },
           body: JSON.stringify({ session_id: "s1", usd: 1 }),
         })

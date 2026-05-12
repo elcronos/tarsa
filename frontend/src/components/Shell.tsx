@@ -278,10 +278,12 @@ export default function Shell({
     (a, b) => lastUpdatedFor(b) - lastUpdatedFor(a)
   );
 
-  // A session is "live" only if at least one of its agents is currently
-  // running. Idle/awaiting/done sessions are stale background noise from
-  // prior Claude Code runs in the same cwd.
-  const isLive = (s: { id: string }): boolean => {
+  // A session is "live" if the backend still marks it active, OR at least
+  // one of its agents is currently running. The session-level check keeps
+  // the current Claude Code session visible between tool-call bursts when
+  // every agent has momentarily flipped to "done".
+  const isLive = (s: Session): boolean => {
+    if (s.status === "active") return true;
     const sa = agentsBySession?.get(s.id) ?? [];
     if (sa.length === 0) return true;
     return sa.some((a) => a.status === "active");
