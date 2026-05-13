@@ -18,7 +18,7 @@ import { isBun } from "./runtime.js";
 import type { EventProcessor } from "./processor.js";
 import type { Database } from "./db.js";
 import type { Event, State } from "./models.js";
-import { bottleneck, costEstimate, parallelismGaps, stuckSignals, errorRecovery, agentPerformanceTable, agentTypeProfiles } from "./insights.js";
+import { bottleneck, costEstimate, parallelismGaps, stuckSignals, errorRecovery, agentPerformanceTable, agentTypeProfiles, pricedCoveragePercent } from "./insights.js";
 import { searchEvents, indexEvent, buildIndex } from "./search.js";
 import { detectBudgetExceeded } from "./insights.js";
 import { readTranscript, readAgentTokens, firstUserMessage, lastAssistantMessage, readTranscriptByPath } from "./transcript.js";
@@ -492,6 +492,7 @@ export function createApp(opts: ServerOptions): Hono {
       },
       costEstimate: cost,
       tokenSource: cost.source,
+      pricedCoveragePct: pricedCoveragePercent(cost),
       parallelismGaps: gaps,
       stuckSignals: stuck,
       errorRecovery: recovery,

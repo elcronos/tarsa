@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { costEstimate } from "../src/insights.js";
+import { costEstimate, pricedCoveragePercent } from "../src/insights.js";
 import {
   PRICING,
   detectModel,
@@ -193,6 +193,41 @@ describe("costEstimate cache token wiring", () => {
     const result = costEstimate(state);
     expect(result.perAgent[0]?.model).toBe("opus");
     expect(result.perAgent[0]?.usd).toBeCloseTo(90, 5);
+  });
+
+  it("pricedCoveragePercent: 3 measured + 1 estimated → 75%", () => {
+    const agents = [
+      makeAgent("a1"),
+      makeAgent("a2"),
+      makeAgent("a3"),
+      makeAgent("a4"),
+    ];
+    const state = makeState(agents);
+    const tokensMap = {
+      a1: { input_tokens: 100, output_tokens: 100, cache_read: 0, cache_creation: 0 },
+      a2: { input_tokens: 100, output_tokens: 100, cache_read: 0, cache_creation: 0 },
+      a3: { input_tokens: 100, output_tokens: 100, cache_read: 0, cache_creation: 0 },
+      // a4 absent from tokensMap → falls to tool_count_fallback / estimated
+    };
+    const result = costEstimate(state, tokensMap);
+    expect(pricedCoveragePercent(result)).toBe(75);
+  });
+
+  it("pricedCoveragePercent: empty → 100", () => {
+    const state = makeState([]);
+    const result = costEstimate(state);
+    expect(pricedCoveragePercent(result)).toBe(100);
+  });
+
+  it("pricedCoveragePercent: all measured → 100", () => {
+    const agents = [makeAgent("m1"), makeAgent("m2")];
+    const state = makeState(agents);
+    const tokensMap = {
+      m1: { input_tokens: 10, output_tokens: 10, cache_read: 0, cache_creation: 0 },
+      m2: { input_tokens: 10, output_tokens: 10, cache_read: 0, cache_creation: 0 },
+    };
+    const result = costEstimate(state, tokensMap);
+    expect(pricedCoveragePercent(result)).toBe(100);
   });
 
   it("cache tokens from event stream also flow into cost", () => {

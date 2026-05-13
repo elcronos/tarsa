@@ -195,6 +195,19 @@ export function costEstimate(
   };
 }
 
+/**
+ * Share of agents (0-100) whose cost data has source === "measured".
+ * Honesty signal: surfaces when USD numbers are estimates vs Anthropic-reported.
+ *
+ * Returns 100 when perAgent is empty (no data → no dishonesty to flag).
+ * Result is rounded to nearest integer percent.
+ */
+export function pricedCoveragePercent(cost: CostEstimateResultWithSource): number {
+  if (cost.perAgent.length === 0) return 100;
+  const measured = cost.perAgent.filter((a) => a.source === "measured").length;
+  return Math.round((measured / cost.perAgent.length) * 100);
+}
+
 // ── Parallelism gaps ──────────────────────────────────────────────────────
 
 export interface ParallelismGap {

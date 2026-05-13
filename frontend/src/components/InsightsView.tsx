@@ -97,6 +97,7 @@ interface InsightsData {
     totalUsd: number;
     source?: CostSource;
   };
+  pricedCoveragePct?: number;
   parallelismGaps: Array<{
     agents: [string, string];
     aEndMs: number;
@@ -226,11 +227,24 @@ function CostBar({
   perAgent,
   totalUsd,
   source,
+  coveragePct,
 }: {
   perAgent: Array<{ agentId: string; agentName: string; usd: number }>;
   totalUsd: number;
   source?: CostSource;
+  coveragePct?: number;
 }) {
+  // Hide USD entirely when all sources are tool_count_fallback and no tokens.
+  // Acceptance: show "—" in that case.
+  const allFallbackNoTokens =
+    source === "tool_count_fallback" && totalUsd === 0;
+
+  if (allFallbackNoTokens) {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)]">—</div>
+    );
+  }
+
   if (totalUsd === 0) {
     return (
       <div className="text-[10px] font-mono text-[var(--fg-subtle)]">
@@ -238,6 +252,9 @@ function CostBar({
       </div>
     );
   }
+
+  const showCoverageBadge =
+    typeof coveragePct === "number" && coveragePct < 100;
 
   return (
     <div className="space-y-2">
@@ -257,6 +274,14 @@ function CostBar({
           <span className="text-[9px] font-mono text-[var(--fg-subtle)]">
             {costSourceLabel(source)}
           </span>
+          {showCoverageBadge && (
+            <span
+              className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 cursor-help"
+              title="Anthropic API-reported tokens (transcript-measured) vs estimated. Higher = more honest."
+            >
+              ~est ({coveragePct}% measured)
+            </span>
+          )}
         </div>
       )}
       <div className="h-4 w-full flex rounded overflow-hidden">
@@ -777,20 +802,31 @@ export default function InsightsView({ state }: InsightsViewProps) {
 
   const agents = useMemo(() => Array.from(state.agents.values()), [state.agents]);
 
-  const { costPerAgent, totalUsd, costMap, costSource } = useMemo(() => {
+  const { costPerAgent, totalUsd, costMap, costSource, coveragePct } = useMemo(() => {
     const perAgent: Array<{ agentId: string; agentName: string; usd: number }> = [];
     const costMap = new Map<string, number>();
     let totalUsd = 0;
     let costSource: CostSource = "tool_count_fallback";
+    let coveragePct: number | undefined;
 
     if (serverInsights) {
+      let measuredCount = 0;
+      let total = 0;
       for (const a of serverInsights.costEstimate.perAgent) {
         perAgent.push({ agentId: a.agentId, agentName: a.agentName, usd: a.usd });
         costMap.set(a.agentId, a.usd);
         totalUsd += a.usd;
+        total++;
+        if (a.source === "measured") measuredCount++;
       }
       totalUsd = serverInsights.costEstimate.totalUsd;
       if (serverInsights.costEstimate.source) costSource = serverInsights.costEstimate.source;
+      coveragePct =
+        typeof serverInsights.pricedCoveragePct === "number"
+          ? serverInsights.pricedCoveragePct
+          : total > 0
+            ? Math.round((measuredCount / total) * 100)
+            : 100;
     } else {
       // Client-side estimate from events
       for (const agent of state.agents.values()) {
@@ -806,7 +842,7 @@ export default function InsightsView({ state }: InsightsViewProps) {
         totalUsd += usd;
       }
     }
-    return { costPerAgent: perAgent, totalUsd, costMap, costSource };
+    return { costPerAgent: perAgent, totalUsd, costMap, costSource, coveragePct };
   }, [serverInsights, state]);
 
   const baselinesMap = useMemo(
@@ -940,7 +976,12 @@ export default function InsightsView({ state }: InsightsViewProps) {
         <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-3">
           Cost Breakdown
         </div>
-        <CostBar perAgent={costPerAgent} totalUsd={totalUsd} source={costSource} />
+        <CostBar
+          perAgent={costPerAgent}
+          totalUsd={totalUsd}
+          source={costSource}
+          coveragePct={coveragePct}
+        />
       </section>
 
       {/* Bottleneck */}
