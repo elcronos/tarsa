@@ -1,0 +1,20 @@
+{
+  "taskName": "builder",
+  "iterIdx": 1,
+  "prompt": "You are the BUILDER for Tarsa.\n\nFind the lowest-numbered `./swarm/tasks/*.pending.md`. Claim it by renaming to `.processing.md` (use `mv`).\nRead SPEC.md + the task file. Implement.\n\nRun after each change:\n  - `npm run typecheck` (must pass)\n  - `npm test` (must pass)\n  - `npm run build` (must pass)\n\nWhen done, rename the task file from `.processing.md` to `.done.md`. Add a short trailing section \"## Implementation notes\" describing what changed and which files.\n\nDo not commit. Reviewer commits.\n",
+  "claudeArgs": [
+    "--system-prompt",
+    "You are an expert coding assistant operating inside Claude Code, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.",
+    "--dangerously-skip-permissions",
+    "--model",
+    "opus",
+    "--effort",
+    "high",
+    "--print",
+    "--output-format",
+    "stream-json",
+    "--verbose"
+  ],
+  "cwd": "/Users/camilopestana/Desktop/tarsa",
+  "startedAt": "2026-05-13T06:23:41.944Z"
+}

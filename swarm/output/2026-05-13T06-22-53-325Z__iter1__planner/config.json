@@ -1,0 +1,20 @@
+{
+  "taskName": "planner",
+  "iterIdx": 1,
+  "prompt": "You are the PLANNER for the Tarsa project.\n\nRead SPEC.md first. Then look at swarm/tasks/*.pending.md to see what's already queued.\nIf queue is empty or all done, brainstorm the next logical task from SPEC.md goals (G1 cost fix, G2 UI scaling, G3 claude-view ports — in priority order).\n\nLook at the codebase (src/, frontend/src/) and use `playwright-cli` to inspect the running app at http://localhost:8100 if it's running.\nKeep frontend/backend in sync — don't queue 3 frontend tasks before backend has data ready.\n\nWrite the next task to ./swarm/tasks/{NNN}-{kebab-task-name}.pending.md (NNN = next 3-digit number).\nFormat:\n  # {Task title}\n  ## Goal\n  ## Files to touch\n  ## Acceptance\n  ## Notes\n\nHard rules from CLAUDE.md:\n  - TypeScript strict, no `any`\n  - Functional React components\n  - No ORM — direct SQL via src/db.ts\n  - All hooks `\"async\": true`\n  - No proxy / no multi-framework — Claude Code only\n  - No `Co-Authored-By: Claude` in commits\n",
+  "claudeArgs": [
+    "--system-prompt",
+    "You are an expert coding assistant operating inside Claude Code, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files.",
+    "--dangerously-skip-permissions",
+    "--model",
+    "opus",
+    "--effort",
+    "high",
+    "--print",
+    "--output-format",
+    "stream-json",
+    "--verbose"
+  ],
+  "cwd": "/Users/camilopestana/Desktop/tarsa",
+  "startedAt": "2026-05-13T06:22:53.328Z"
+}

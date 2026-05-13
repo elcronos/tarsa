@@ -4,14 +4,23 @@
 
 import type { Agent, State, ToolCall } from "./models.js";
 import { createHash } from "node:crypto";
+import { PRICING, detectModel, priceUsd, type ModelKey } from "./shared/pricing.js";
 
 // ── Pricing constants (per million tokens) ────────────────────────────────
-// Sonnet 4.5
-export const SONNET_INPUT = 3;
-export const SONNET_OUTPUT = 15;
-// Opus 4.7
-export const OPUS_INPUT = 15;
-export const OPUS_OUTPUT = 75;
+// Re-exported for backward compat with existing tests. Canonical source:
+// `src/shared/pricing.ts`.
+export const SONNET_INPUT = PRICING.sonnet.input;
+export const SONNET_OUTPUT = PRICING.sonnet.output;
+export const SONNET_CACHE_READ = PRICING.sonnet.cacheRead;
+export const SONNET_CACHE_WRITE = PRICING.sonnet.cacheWrite;
+export const OPUS_INPUT = PRICING.opus.input;
+export const OPUS_OUTPUT = PRICING.opus.output;
+export const OPUS_CACHE_READ = PRICING.opus.cacheRead;
+export const OPUS_CACHE_WRITE = PRICING.opus.cacheWrite;
+export const HAIKU_INPUT = PRICING.haiku.input;
+export const HAIKU_OUTPUT = PRICING.haiku.output;
+export const HAIKU_CACHE_READ = PRICING.haiku.cacheRead;
+export const HAIKU_CACHE_WRITE = PRICING.haiku.cacheWrite;
 
 // ── Bottleneck ────────────────────────────────────────────────────────────
 
@@ -50,8 +59,10 @@ export interface AgentCost {
   agentName: string;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
   usd: number;
-  model: "sonnet" | "opus";
+  model: ModelKey;
 }
 
 export interface CostEstimateResult {
@@ -86,14 +97,26 @@ export function costEstimate(
   for (const agent of state.agents.values()) {
     let inputTokens = 0;
     let outputTokens = 0;
-    let model: "sonnet" | "opus" = "sonnet";
+    let cacheReadTokens = 0;
+    let cacheCreationTokens = 0;
+    let model: ModelKey = "sonnet";
     let source: "measured" | "estimated_chars" | "tool_count_fallback" = "tool_count_fallback";
 
     if (hasMeasured && tokensMap[agent.id] != null) {
       // Use transcript-measured tokens
-      inputTokens = tokensMap[agent.id]!.input_tokens;
-      outputTokens = tokensMap[agent.id]!.output_tokens;
-      if (inputTokens > 0 || outputTokens > 0) source = "measured";
+      const t = tokensMap[agent.id]!;
+      inputTokens = t.input_tokens;
+      outputTokens = t.output_tokens;
+      cacheReadTokens = t.cache_read;
+      cacheCreationTokens = t.cache_creation;
+      if (
+        inputTokens > 0 ||
+        outputTokens > 0 ||
+        cacheReadTokens > 0 ||
+        cacheCreationTokens > 0
+      ) {
+        source = "measured";
+      }
     }
 
     if (source === "tool_count_fallback") {
@@ -102,17 +125,29 @@ export function costEstimate(
         if (event.agent_id !== agent.id) continue;
         const it = event["input_tokens"];
         const ot = event["output_tokens"];
+        const cr = event["cache_read"];
+        const cw = event["cache_creation"];
         const m = event["model"];
         if (typeof it === "number") inputTokens += it;
         if (typeof ot === "number") outputTokens += ot;
-        if (typeof m === "string" && m.toLowerCase().includes("opus")) {
-          model = "opus";
+        if (typeof cr === "number") cacheReadTokens += cr;
+        if (typeof cw === "number") cacheCreationTokens += cw;
+        if (typeof m === "string") {
+          const detected = detectModel(m);
+          // Promote sonnet → opus/haiku if observed; never demote
+          if (detected !== "sonnet") model = detected;
         }
       }
     }
 
     // Char-based fallback: sum chars from tool_calls when no token data found
-    if (source === "tool_count_fallback" && inputTokens === 0 && outputTokens === 0) {
+    if (
+      source === "tool_count_fallback" &&
+      inputTokens === 0 &&
+      outputTokens === 0 &&
+      cacheReadTokens === 0 &&
+      cacheCreationTokens === 0
+    ) {
       const calls: ToolCall[] = state.tool_calls.get(agent.id) ?? [];
       let inputChars = 0;
       let outputChars = 0;
@@ -128,11 +163,13 @@ export function costEstimate(
       }
     }
 
-    const inputRate = model === "opus" ? OPUS_INPUT : SONNET_INPUT;
-    const outputRate = model === "opus" ? OPUS_OUTPUT : SONNET_OUTPUT;
-    const usd =
-      (inputTokens / 1_000_000) * inputRate +
-      (outputTokens / 1_000_000) * outputRate;
+    const usd = priceUsd(
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      model
+    );
 
     totalUsd += usd;
     perAgent.push({
@@ -140,6 +177,8 @@ export function costEstimate(
       agentName: agent.name,
       inputTokens,
       outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
       usd: Math.round(usd * 1_000_000) / 1_000_000,
       model,
       source,

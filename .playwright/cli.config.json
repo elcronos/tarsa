@@ -1,0 +1,9 @@
+{
+  "browser": {
+    "browserName": "chromium",
+    "userDataDir": ".playwright/profile",
+    "launchOptions": {
+      "channel": "chrome"
+    }
+  }
+}

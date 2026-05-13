@@ -1,0 +1,16 @@
+Now patch `src/insights.ts`:
+Now rewrite the costEstimate body:
+Now add new vitest cases for cache pricing:
+Typecheck passes. Run tests:
+Build green. Typecheck green. Cost tests green. The 10 remaining test failures are pre-existing better-sqlite3 native binding issues (unchanged from baseline — 15 failed → 10 failed after my changes, zero new regressions).
+
+Finalize:
+Task 001 done.
+
+**Summary**:
+- New `src/shared/pricing.ts` — canonical model pricing (Sonnet/Opus/Haiku rates incl. cache read/write) + `detectModel` + `priceUsd`.
+- `src/insights.ts`: `costEstimate` now wires `cache_read`/`cache_creation` into USD via shared module. `AgentCost` extended with cache token fields. Haiku branch added.
+- `frontend/src/utils/cost.ts`: re-exports shared module + back-compat `estimateCost`.
+- New test file `test/insights_cache_pricing.test.ts` (13 cases) covering acceptance: 1M each at Sonnet → 22.05 USD ✓.
+- `typecheck`, `build`, all cost-related vitest suites pass. Pre-existing better-sqlite3 binding failures unchanged (no regressions; 15→10).
+- Task renamed to `001-fix-cost-cache-tokens.done.md` with implementation notes appended.

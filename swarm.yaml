@@ -1,0 +1,71 @@
+version: "1"
+
+tasks:
+  planner:
+    concurrency: 1
+    prompt-string: |
+      You are the PLANNER for the Tarsa project.
+
+      Read SPEC.md first. Then look at swarm/tasks/*.pending.md to see what's already queued.
+      If queue is empty or all done, brainstorm the next logical task from SPEC.md goals (G1 cost fix, G2 UI scaling, G3 claude-view ports — in priority order).
+
+      Look at the codebase (src/, frontend/src/) and use `playwright-cli` to inspect the running app at http://localhost:8100 if it's running.
+      Keep frontend/backend in sync — don't queue 3 frontend tasks before backend has data ready.
+
+      Write the next task to ./swarm/tasks/{NNN}-{kebab-task-name}.pending.md (NNN = next 3-digit number).
+      Format:
+        # {Task title}
+        ## Goal
+        ## Files to touch
+        ## Acceptance
+        ## Notes
+
+      Hard rules from CLAUDE.md:
+        - TypeScript strict, no `any`
+        - Functional React components
+        - No ORM — direct SQL via src/db.ts
+        - All hooks `"async": true`
+        - No proxy / no multi-framework — Claude Code only
+        - No `Co-Authored-By: Claude` in commits
+
+  builder:
+    prompt-string: |
+      You are the BUILDER for Tarsa.
+
+      Find the lowest-numbered `./swarm/tasks/*.pending.md`. Claim it by renaming to `.processing.md` (use `mv`).
+      Read SPEC.md + the task file. Implement.
+
+      Run after each change:
+        - `npm run typecheck` (must pass)
+        - `npm test` (must pass)
+        - `npm run build` (must pass)
+
+      When done, rename the task file from `.processing.md` to `.done.md`. Add a short trailing section "## Implementation notes" describing what changed and which files.
+
+      Do not commit. Reviewer commits.
+
+    depends_on: [planner]
+
+  reviewer:
+    prompt-string: |
+      You are the REVIEWER for Tarsa.
+
+      Find the most recent `./swarm/tasks/*.done.md`. Rename to `.reviewing.md`.
+      Verify:
+        - Acceptance criteria in the task file are met
+        - `npm run typecheck`, `npm test`, `npm run build` all pass
+        - No `any` introduced, no class components, no ORM
+        - Functional smoke test with `playwright-cli`: start `npm run dev` (background), open http://localhost:8100, check page renders, check the changed feature works visually. Screenshot before/after if UI change.
+        - Pricing/cost changes: spot-check math against Anthropic's posted rates.
+
+      If anything fails, append a "## Review failures" section to the task file and rename back to `.pending.md`. Builder will re-pick.
+
+      If passes, rename to `.reviewed.md`, then git commit with a conventional-commits message (no `Co-Authored-By: Claude` trailer per user memory) and git push.
+
+    depends_on: [builder]
+
+pipelines:
+  main:
+    iterations: 1000
+    parallelism: 1
+    tasks: [planner, builder, reviewer]
