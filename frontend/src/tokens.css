@@ -1,0 +1,41 @@
+/* ── Design tokens — rem-based spacing, typography, color, radius ─────── */
+
+:root {
+  /* Root font-size scales with viewport width so all rem-based sizes scale.
+     Clamped between 14px and 18px for legibility on phones / 4K monitors. */
+  font-size: clamp(14px, 0.5rem + 0.5vw, 18px);
+
+  /* ── Spacing scale (rem) ─────────────────────────────────────────────── */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* ── Font-size scale (rem) ───────────────────────────────────────────── */
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.25rem;
+  --fs-2xl: 1.5rem;
+
+  /* ── Radius scale (rem) ──────────────────────────────────────────────── */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* ── Semantic colors — alias existing teal-lens palette ──────────────── */
+  --color-bg: #08100f;
+  --color-fg: #f4faf9;
+  --color-muted: #9ab0ad;
+  --color-accent: #14b8a6;
+  --color-border: #1f2d2c;
+  --color-error: #f87171;
+  --color-warn: #f59e0b;
+  --color-ok: #34d399;
+}
