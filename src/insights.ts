@@ -323,6 +323,42 @@ export function sessionCostBreakdown(
   };
 }
 
+// ── Per-commit cost breakdown ─────────────────────────────────────────────
+
+export interface CommitCostResult {
+  sha: string;
+  totalUsd: number;
+  coveragePercent: number;
+  perAgent: SessionCostRow[];
+  perModel: Record<ModelKey, { usd: number; tokens: number }>;
+  eventCount: number;
+}
+
+/**
+ * Pure function: compute cost for all events associated with a given commit SHA.
+ * Events are expected to be pre-filtered by db.getEventsByCommit (which has an
+ * index on json_extract(payload, '$.git_commit')). This function folds blindly
+ * over the provided events — it does NOT re-filter by sha.
+ *
+ * Short SHA matching: depends on what was stored by the git context capture.
+ * Full 40-hex round-trip is the guaranteed path; short SHA returns empty if
+ * the DB only stored full SHAs.
+ */
+export function commitCostBreakdown(
+  events: Array<{ [key: string]: unknown }>,
+  sha: string
+): CommitCostResult {
+  const result = sessionCostBreakdown(sha, events);
+  return {
+    sha,
+    totalUsd: result.totalUsd,
+    coveragePercent: result.coveragePercent,
+    perAgent: result.perAgent,
+    perModel: result.perModel,
+    eventCount: result.eventCount,
+  };
+}
+
 /**
  * Share of agents (0-100) whose cost data has source === "measured".
  * Honesty signal: surfaces when USD numbers are estimates vs Anthropic-reported.

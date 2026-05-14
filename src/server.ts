@@ -18,7 +18,7 @@ import { isBun } from "./runtime.js";
 import type { EventProcessor } from "./processor.js";
 import type { Database } from "./db.js";
 import type { Event, State } from "./models.js";
-import { bottleneck, costEstimate, contextUsage, parallelismGaps, stuckSignals, errorRecovery, agentPerformanceTable, agentTypeProfiles, pricedCoveragePercent, sessionCostBreakdown } from "./insights.js";
+import { bottleneck, costEstimate, contextUsage, parallelismGaps, stuckSignals, errorRecovery, agentPerformanceTable, agentTypeProfiles, pricedCoveragePercent, sessionCostBreakdown, commitCostBreakdown } from "./insights.js";
 import { searchEvents, indexEvent, buildIndex } from "./search.js";
 import { detectBudgetExceeded } from "./insights.js";
 import { readTranscript, readAgentTokens, firstUserMessage, lastAssistantMessage, readTranscriptByPath } from "./transcript.js";
@@ -447,6 +447,19 @@ export function createApp(opts: ServerOptions): Hono {
     const events = persistedEvents.length > 0 ? persistedEvents : liveEvents;
     c.header("Cache-Control", "no-store");
     return c.json(sessionCostBreakdown(id, events as Array<{ [key: string]: unknown }>));
+  });
+
+  // ── GET /api/commits/:sha/cost ──────────────────────────────────────
+  // Accepts 7-40 hex char SHA. Short SHA matching depends on event storage
+  // from task 010 (full 40-hex stored); short SHA returns empty, not an error.
+  app.get("/api/commits/:sha/cost", (c) => {
+    const sha = c.req.param("sha");
+    if (!/^[0-9a-f]{7,40}$/i.test(sha)) {
+      return c.json({ error: "invalid sha" }, 400);
+    }
+    const events = db.getEventsByCommit(sha);
+    c.header("Cache-Control", "no-store");
+    return c.json(commitCostBreakdown(events as Array<{ [key: string]: unknown }>, sha));
   });
 
   // ── GET /api/insights ───────────────────────────────────────────────

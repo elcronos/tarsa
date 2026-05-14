@@ -3,6 +3,7 @@ import type { Agent, Event, Session, ToolCall, CostSource } from "../types";
 import { formatDuration, formatCost, formatTime } from "../utils/format";
 import { extractFilesTouched } from "../utils/files";
 import SessionCostCard from "./SessionCostCard";
+import CommitCostCard from "./CommitCostCard";
 import IOPair from "./IOPair";
 import JsonView, { tryParseJson } from "./JsonView";
 import Markdown, { looksLikeMarkdown } from "./Markdown";
@@ -1293,6 +1294,7 @@ export default function DetailPanel({
           </div>
           {session && <GitBadge session={session} />}
           <SessionCostCard sessionId={agent.session_id} />
+          {session?.git_commit && <CommitCostCard sha={session.git_commit} />}
         </div>
         <button
           onClick={onClose}
