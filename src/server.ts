@@ -107,6 +107,50 @@ function runClaudeBrief(promptText: string): Promise<string> {
 }
 
 
+// ── Editor detection (cached at first use) ────────────────────────────────
+
+type EditorInfo = { bin: string; args: (filePath: string, line?: number, col?: number) => string[] };
+
+let _editorCache: EditorInfo | null | undefined = undefined; // undefined = not yet resolved
+
+const EDITOR_CANDIDATES: EditorInfo[] = [
+  { bin: "cursor", args: (fp, line, col) => line != null ? ["-g", col != null ? `${fp}:${line}:${col}` : `${fp}:${line}`] : [fp] },
+  { bin: "code",   args: (fp, line, col) => line != null ? ["-g", col != null ? `${fp}:${line}:${col}` : `${fp}:${line}`] : [fp] },
+  { bin: "zed",    args: (fp, line, col) => line != null ? [col != null ? `${fp}:${line}:${col}` : `${fp}:${line}`] : [fp] },
+];
+
+async function resolveEditor(): Promise<EditorInfo | null> {
+  if (_editorCache !== undefined) return _editorCache;
+
+  // Honour EDITOR env var if it names one of our known editors
+  const envEditor = process.env["EDITOR"];
+  if (envEditor) {
+    const known = EDITOR_CANDIDATES.find((e) => e.bin === envEditor || envEditor.endsWith(`/${e.bin}`));
+    if (known) {
+      const found = await new Promise<boolean>((resolve) => {
+        execFile("which", [known.bin], (err) => resolve(!err));
+      });
+      if (found) {
+        _editorCache = known;
+        return _editorCache;
+      }
+    }
+  }
+
+  for (const candidate of EDITOR_CANDIDATES) {
+    const found = await new Promise<boolean>((resolve) => {
+      execFile("which", [candidate.bin], (err) => resolve(!err));
+    });
+    if (found) {
+      _editorCache = candidate;
+      return _editorCache;
+    }
+  }
+
+  _editorCache = null;
+  return null;
+}
+
 // ── Spawn session helper ──────────────────────────────────────────────────
 
 function checkBinaryOnPath(binary: string): Promise<boolean> {
@@ -953,6 +997,65 @@ export function createApp(opts: ServerOptions): Hono {
       session_name: sessionName,
       attach_cmd: `tmux attach -t ${sessionName}`,
     });
+  });
+
+  // ── POST /api/open-in-editor ────────────────────────────────────────
+  // Shell out to cursor / code / zed to open a file at an optional line/col.
+  // Only permitted in localhost mode (not --allow-remote).
+  // Path validated: must be absolute, must exist, must not escape via symlink.
+  app.post("/api/open-in-editor", async (c) => {
+    if (allowRemote) {
+      return c.json({ error: "open-in-editor is not permitted in remote mode" }, 403);
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await c.req.json() as Record<string, unknown>;
+    } catch {
+      return c.json({ error: "Invalid JSON body" }, 400);
+    }
+
+    const filePath = body["path"];
+    if (typeof filePath !== "string" || !filePath) {
+      return c.json({ error: "path is required" }, 400);
+    }
+
+    if (!path.isAbsolute(filePath)) {
+      return c.json({ error: "path must be absolute" }, 400);
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return c.json({ error: "path does not exist" }, 404);
+    }
+
+    // Symlink escape guard: resolved path must stay within the user's home dir
+    let realFile: string;
+    try {
+      realFile = fs.realpathSync(filePath);
+    } catch {
+      return c.json({ error: "cannot resolve path" }, 400);
+    }
+
+    const home = os.homedir();
+    if (!realFile.startsWith(home + path.sep) && realFile !== home) {
+      return c.json({ error: "path must be inside your home directory" }, 403);
+    }
+
+    const line = typeof body["line"] === "number" ? body["line"] : undefined;
+    const col  = typeof body["col"]  === "number" ? body["col"]  : undefined;
+
+    const editor = await resolveEditor();
+    if (!editor) {
+      return c.json(
+        { error: "No supported editor found (cursor, code, zed). Install one or set $EDITOR." },
+        503
+      );
+    }
+
+    const args = editor.args(realFile, line, col);
+    spawn(editor.bin, args, { detached: true, stdio: "ignore" }).unref();
+
+    return c.json({ status: "ok", editor: editor.bin });
   });
 
   // ── Static files + SPA fallback ─────────────────────────────────────

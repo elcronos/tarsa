@@ -1,10 +1,40 @@
 import { useState } from "react";
+import { openInEditor } from "../utils/openInEditor";
 
-// ── File path linking (Goal 9) ────────────────────────────────────────────────
+// ── File path linking ─────────────────────────────────────────────────────────
 
 const FILE_PATH_RE = /\/[\w./_-]+\.(ts|tsx|js|jsx|md|json|py|go|rs|css|html|sh|yaml|yml|toml|svg)\b/g;
 
-/** Render a string with embedded absolute file paths as VS Code links */
+function FilePathLink({ filePath }: { filePath: string }) {
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  function handleClick(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    openInEditor(filePath).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      setToastMsg(msg);
+      setTimeout(() => setToastMsg(null), 4000);
+    });
+  }
+
+  return (
+    <>
+      <button
+        onClick={handleClick}
+        title="Open in editor"
+        className="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer font-mono"
+      >
+        {filePath}
+      </button>
+      {toastMsg && (
+        <span className="ml-2 text-[9px] text-red-400 font-mono">{toastMsg}</span>
+      )}
+    </>
+  );
+}
+
+/** Render a string with embedded absolute file paths as clickable editor links */
 export function renderWithFilePaths(text: string): React.ReactNode {
   const parts: React.ReactNode[] = [];
   let last = 0;
@@ -14,19 +44,9 @@ export function renderWithFilePaths(text: string): React.ReactNode {
     if (match.index > last) {
       parts.push(text.slice(last, match.index));
     }
-    const path = match[0];
-    parts.push(
-      <a
-        key={match.index}
-        href={`vscode://file${path}`}
-        title="Open in VS Code"
-        className="text-blue-400 hover:text-blue-300 hover:underline"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {path}
-      </a>
-    );
-    last = match.index + path.length;
+    const fp = match[0];
+    parts.push(<FilePathLink key={match.index} filePath={fp} />);
+    last = match.index + fp.length;
   }
   if (last < text.length) parts.push(text.slice(last));
   return parts.length === 0 ? text : <>{parts}</>;
