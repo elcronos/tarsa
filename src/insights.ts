@@ -566,13 +566,20 @@ export interface BudgetExceeded {
  * For each session with a budget set, compute its cumulative cost; if
  * cost > budget, emit a BudgetExceeded record. Caller is responsible for
  * deduping (only emit on the first crossing).
+ *
+ * Pass `tokensMap` (Anthropic-reported transcript tokens, incl. cache) so the
+ * budget check uses measured cost. Without it, costEstimate falls back to a
+ * char/4 heuristic that ignores cache tokens and badly undercounts.
  */
-export function detectBudgetExceeded(state: State): BudgetExceeded[] {
+export function detectBudgetExceeded(
+  state: State,
+  tokensMap?: Record<string, { input_tokens: number; output_tokens: number; cache_read: number; cache_creation: number }>
+): BudgetExceeded[] {
   const out: BudgetExceeded[] = [];
   if (state.sessions.size === 0) return out;
 
   // Compute per-session cost from per-agent cost
-  const cost = costEstimate(state);
+  const cost = costEstimate(state, tokensMap);
   const costPerSession = new Map<string, number>();
   for (const a of cost.perAgent) {
     const agent = state.agents.get(a.agentId);

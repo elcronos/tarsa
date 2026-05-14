@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { costEstimate, SONNET_INPUT, SONNET_OUTPUT } from "../src/insights.js";
+import { costEstimate, detectBudgetExceeded, SONNET_INPUT, SONNET_OUTPUT } from "../src/insights.js";
 import type { Agent, State, Event, ToolCall, Session } from "../src/models.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -163,5 +163,32 @@ describe("costEstimate with perAgentTokens (US-V2-04)", () => {
     expect(result.perAgent[0]?.outputTokens).toBe(20_000);
     // source is tool_count_fallback (not "measured") when using event fields
     expect(result.perAgent[0]?.source).toBe("tool_count_fallback");
+  });
+});
+
+describe("detectBudgetExceeded with tokensMap", () => {
+  it("counts measured cache tokens against the budget", () => {
+    const agent = makeAgent("cache-ag");
+    const state = makeState([agent]);
+    state.sessions.get("sess-1")!.budget_usd = 1.0;
+
+    // Heavy cache_read — the dominant token type in Claude Code sessions.
+    const tokensMap = {
+      "cache-ag": {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read: 10_000_000,
+        cache_creation: 0,
+      },
+    };
+
+    // Without tokensMap: no events, no tool calls → cost 0 → budget not crossed.
+    expect(detectBudgetExceeded(state)).toHaveLength(0);
+
+    // With tokensMap: measured cache tokens are priced and cross the budget.
+    const exceeded = detectBudgetExceeded(state, tokensMap);
+    expect(exceeded).toHaveLength(1);
+    expect(exceeded[0]?.session_id).toBe("sess-1");
+    expect(exceeded[0]?.current).toBeGreaterThan(exceeded[0]!.budget);
   });
 });

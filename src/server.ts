@@ -1021,7 +1021,28 @@ export async function startServer(opts: ServerOptions): Promise<ServerHandle> {
 
     // Budget-exceeded detection: emit once per session per crossing.
     try {
-      const exceeded = detectBudgetExceeded(processor.state);
+      // Build a tokensMap of Anthropic-reported transcript tokens (incl. cache)
+      // for agents in sessions that have a budget set. Without this, the budget
+      // check falls back to a char/4 heuristic and badly undercounts.
+      const st = processor.state;
+      const budgetedSessions = new Set<string>();
+      for (const [sid, session] of st.sessions) {
+        if (typeof session.budget_usd === "number" && session.budget_usd > 0) {
+          budgetedSessions.add(sid);
+        }
+      }
+      let tokensMap:
+        | Record<string, { input_tokens: number; output_tokens: number; cache_read: number; cache_creation: number }>
+        | undefined;
+      if (budgetedSessions.size > 0) {
+        tokensMap = {};
+        for (const agent of st.agents.values()) {
+          if (!budgetedSessions.has(agent.session_id)) continue;
+          // readAgentTokens is mtime-cached (30s TTL) so this is cheap on the hot path.
+          tokensMap[agent.id] = readAgentTokens(agent.session_id, agent.id);
+        }
+      }
+      const exceeded = detectBudgetExceeded(processor.state, tokensMap);
       for (const be of exceeded) {
         if (budgetExceededSessions.has(be.session_id)) continue;
         budgetExceededSessions.add(be.session_id);
