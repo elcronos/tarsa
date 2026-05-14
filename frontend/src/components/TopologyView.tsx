@@ -161,9 +161,10 @@ interface TopologyInnerProps {
   onSelectAgent: (id: string | null) => void;
   statusFilter: StatusFilterSet;
   onStatusFilterChange: (next: StatusFilterSet) => void;
+  onMonitor?: (agentId: string) => void;
 }
 
-function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, onStatusFilterChange }: TopologyInnerProps) {
+function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, onStatusFilterChange, onMonitor }: TopologyInnerProps) {
   const { fitView } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -255,6 +256,7 @@ function TopologyInner({ state, selectedAgentId, onSelectAgent, statusFilter, on
             isSelected: agent.id === selectedAgentId,
             isStuck,
             durationMs,
+            onMonitor,
           },
         };
       }
@@ -482,6 +484,7 @@ interface TopologyViewProps {
   onSelectAgent: (id: string | null) => void;
   statusFilter: StatusFilterSet;
   onStatusFilterChange: (next: StatusFilterSet) => void;
+  onMonitor?: (agentId: string) => void;
 }
 
 export default function TopologyView(props: TopologyViewProps) {

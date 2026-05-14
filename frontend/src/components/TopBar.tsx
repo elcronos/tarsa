@@ -40,12 +40,16 @@ interface TopBarProps {
   sessionCwd?: string | null;
   /** Currently selected session id — drives cost chip and stuck badge. */
   selectedSessionId?: string | null;
+  /** Currently selected agent id — enables Monitor tab when set. */
+  selectedAgentId?: string | null;
   /** Budget for the selected session in USD (0 or undefined = no budget). */
   sessionBudgetUsd?: number;
   /** Called when the user clicks the `+ terminal` button. The parent opens
    *  the bottom-dock folder picker — no modal — so all terminal placements
    *  share a single surface. */
   onNewTerminal?: () => void;
+  /** Enter monitor mode for the currently selected agent. */
+  onEnterMonitor?: (agentId: string) => void;
 }
 
 function StatusPill({
@@ -135,8 +139,10 @@ export default function TopBar({
   showTeamTab,
   sessionCwd,
   selectedSessionId,
+  selectedAgentId,
   sessionBudgetUsd,
   onNewTerminal,
+  onEnterMonitor,
 }: TopBarProps) {
   // Team tab intentionally suppressed; honor showTeamTab once view is reworked.
   void showTeamTab;
@@ -262,6 +268,23 @@ export default function TopBar({
             {tab.label}
           </button>
         ))}
+        <button
+          onClick={() => selectedAgentId && onEnterMonitor?.(selectedAgentId)}
+          disabled={!selectedAgentId}
+          title={selectedAgentId ? "Monitor selected agent" : "Select an agent to enable monitor mode"}
+          className={`
+            px-2.5 py-1 rounded text-xs font-mono transition-colors relative
+            ${
+              activeView === "monitor"
+                ? "bg-[var(--surface-raised)] text-[var(--fg)]"
+                : selectedAgentId
+                  ? "text-[var(--fg-muted)] hover:text-[var(--fg)] hover:bg-[var(--surface-raised)]"
+                  : "text-[var(--fg-subtle)] opacity-40 cursor-not-allowed"
+            }
+          `}
+        >
+          Monitor
+        </button>
       </nav>
 
       {/* Right side */}

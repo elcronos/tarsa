@@ -13,10 +13,11 @@ export interface AgentNodeData {
   isSelected: boolean;
   isStuck: boolean;
   durationMs: number | null;
+  onMonitor?: (agentId: string) => void;
 }
 
 function AgentNode({ data }: NodeProps<AgentNodeData>) {
-  const { agent, isSelected, isStuck, durationMs } = data;
+  const { agent, isSelected, isStuck, durationMs, onMonitor } = data;
   const now = useNow();
 
   const statusDot =
@@ -70,14 +71,27 @@ function AgentNode({ data }: NodeProps<AgentNodeData>) {
       <Handle type="source" position={Position.Right} className="!bg-[var(--border)] !w-2 !h-2" />
 
       {/* Header row — primary label (description or name) */}
-      <div className="flex items-center gap-1.5 mb-1">
+      <div className="flex items-center gap-1.5 mb-1 group">
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${statusDot}`} />
         <span
-          className="truncate font-mono text-xs font-medium text-[var(--fg)] leading-none"
+          className="truncate font-mono text-xs font-medium text-[var(--fg)] leading-none flex-1 min-w-0"
           title={primaryLabel}
         >
           {primaryLabel}
         </span>
+        {onMonitor && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMonitor(agent.id); }}
+            className="opacity-0 group-hover:opacity-100 shrink-0 text-[var(--fg-subtle)] hover:text-[var(--accent)] transition-opacity"
+            title="Monitor this agent"
+            aria-label="Monitor this agent"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Type badge (small, monospace pill) + team badge + duration + error/stuck */}

@@ -18,6 +18,7 @@ import { useHotkey } from "./hooks/useHotkey";
 import GlobalView from "./components/GlobalView";
 import SessionHistory from "./components/SessionHistory";
 import TeamView from "./components/TeamView";
+import MonitorView, { type InsightsPayload } from "./components/MonitorView";
 import { isTeamWorker } from "./utils/team";
 import { loadDismissed, addDismissed, removeDismissed } from "./utils/session_storage";
 import { loadProjects, addProject, removeProject, type Project } from "./utils/projects";
@@ -37,6 +38,9 @@ export default function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(() => readSessionFromUrl());
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState("global");
+  const [prevView, setPrevView] = useState("global");
+  const [monitorAgentId, setMonitorAgentId] = useState<string | null>(null);
+  const [monitorInsights, setMonitorInsights] = useState<InsightsPayload>({});
   const [searchOpen, setSearchOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -325,8 +329,26 @@ export default function App() {
   };
 
   const handleViewChange = (view: string) => {
+    if (view !== "monitor") setPrevView(activeView);
     setActiveView(view);
   };
+
+  const handleEnterMonitor = useCallback((agentId: string) => {
+    setMonitorAgentId(agentId);
+    setPrevView(activeView);
+    setActiveView("monitor");
+    const sessionId = Array.from(displayState.agents.values()).find((a) => a.id === agentId)?.session_id;
+    const url = sessionId ? `/api/insights?session=${sessionId}` : "/api/insights";
+    fetch(url)
+      .then((r) => r.ok ? r.json() as Promise<InsightsPayload> : Promise.reject())
+      .then((data) => setMonitorInsights(data))
+      .catch(() => setMonitorInsights({}));
+  }, [activeView, displayState.agents]);
+
+  const handleExitMonitor = useCallback(() => {
+    setActiveView(prevView);
+    setMonitorAgentId(null);
+  }, [prevView]);
 
   const handleDismissSession = useCallback((sessionId: string) => {
     setDismissedIds((prev) => addDismissed(prev, sessionId));
@@ -359,6 +381,8 @@ export default function App() {
           setCommandOpen(false);
         } else if (searchOpen) {
           setSearchOpen(false);
+        } else if (activeView === "monitor") {
+          handleExitMonitor();
         } else if (selectedAgentId !== null) {
           // ESC closes DetailPanel (US-015)
           setSelectedAgentId(null);
@@ -367,7 +391,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [searchOpen, commandOpen, selectedAgentId]);
+  }, [searchOpen, commandOpen, selectedAgentId, activeView, handleExitMonitor]);
 
   const [flashEventId, setFlashEventId] = useState<string | null>(null);
   const handleSearchResult = useCallback(
@@ -512,8 +536,10 @@ export default function App() {
         onProjectFilterChange={setProjectFilter}
         showTeamTab={showTeamTab}
         selectedSessionId={selectedSessionId}
+        selectedAgentId={selectedAgentId}
         sessionBudgetUsd={sessionBudgetUsd}
         onNewTerminal={handleNewTerminal}
+        onEnterMonitor={handleEnterMonitor}
       />
 
       {/* Budget exceeded banner */}
@@ -576,6 +602,7 @@ export default function App() {
                 onSelectAgent={handleSelectAgent}
                 statusFilter={statusFilter}
                 onStatusFilterChange={handleStatusFilterChange}
+                onMonitor={handleEnterMonitor}
               />
             )}
             {activeView === "timeline" && (
@@ -603,6 +630,18 @@ export default function App() {
             {activeView === "insights" && (
               <InsightsView state={displayState} />
             )}
+            {activeView === "monitor" && monitorAgentId && (() => {
+              const monAgent = displayState.agents.get(monitorAgentId) ?? baseState.agents.get(monitorAgentId);
+              if (!monAgent) { handleExitMonitor(); return null; }
+              return (
+                <MonitorView
+                  agent={monAgent}
+                  events={displayEvents}
+                  insights={monitorInsights}
+                  onExit={handleExitMonitor}
+                />
+              );
+            })()}
             {activeView === "compare" && (
               <SessionDiffView />
             )}
