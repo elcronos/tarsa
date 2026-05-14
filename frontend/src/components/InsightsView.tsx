@@ -91,6 +91,8 @@ interface InsightsData {
       agentName: string;
       inputTokens: number;
       outputTokens: number;
+      cacheReadTokens: number;
+      cacheCreationTokens: number;
       usd: number;
       model: string;
       source?: CostSource;
@@ -240,6 +242,96 @@ function costSourceLabel(source: CostSource): string {
   if (source === "measured") return "from transcript";
   if (source === "estimated_chars") return "estimated from chars (4 chars/token)";
   return "estimated from tool count";
+}
+
+// ── Token-type breakdown + cache efficiency ──────────────────────────────────
+
+interface TokenTotals {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
+const TOKEN_CATEGORIES: Array<{ key: keyof TokenTotals; label: string; color: string }> = [
+  { key: "input", label: "Input", color: "#60a5fa" },
+  { key: "output", label: "Output", color: "#34d399" },
+  { key: "cacheRead", label: "Cache read", color: "#2dd4bf" },
+  { key: "cacheWrite", label: "Cache write", color: "#fbbf24" },
+];
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+/**
+ * Cache hit rate: share of prompt-side tokens (input + cache read + cache write)
+ * that were served from cache. Higher = cheaper, more efficient prompt reuse.
+ */
+function cacheEfficiency(t: TokenTotals): number | null {
+  const promptTokens = t.input + t.cacheRead + t.cacheWrite;
+  if (promptTokens === 0) return null;
+  return Math.round((t.cacheRead / promptTokens) * 100);
+}
+
+function TokenBreakdown({ tokens }: { tokens: TokenTotals }) {
+  const total = tokens.input + tokens.output + tokens.cacheRead + tokens.cacheWrite;
+  if (total === 0) {
+    return (
+      <div className="text-[10px] font-mono text-[var(--fg-subtle)]">
+        No token data available
+      </div>
+    );
+  }
+  const eff = cacheEfficiency(tokens);
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[9px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider">
+          Token breakdown
+        </span>
+        {eff !== null && (
+          <span
+            className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-300 cursor-help"
+            title="Cache hit rate — share of prompt tokens served from cache (input + cache read + cache write). Higher = cheaper."
+          >
+            {eff}% cache
+          </span>
+        )}
+      </div>
+      <div className="h-4 w-full flex rounded overflow-hidden">
+        {TOKEN_CATEGORIES.map((cat) => {
+          const pct = (tokens[cat.key] / total) * 100;
+          if (pct < 0.5) return null;
+          return (
+            <div
+              key={cat.key}
+              style={{ width: `${pct}%`, backgroundColor: cat.color }}
+              title={`${cat.label}: ${tokens[cat.key].toLocaleString()} tokens`}
+            />
+          );
+        })}
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+        {TOKEN_CATEGORIES.map((cat) => (
+          <div key={cat.key} className="flex items-center gap-1.5">
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: cat.color }}
+            />
+            <span className="text-[10px] font-mono text-[var(--fg-muted)] flex-1 truncate">
+              {cat.label}
+            </span>
+            <span className="text-[10px] font-mono text-[var(--fg-subtle)] tabular-nums">
+              {formatTokens(tokens[cat.key])}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function CostBar({
@@ -886,12 +978,14 @@ export default function InsightsView({ state }: InsightsViewProps) {
 
   const agents = useMemo(() => Array.from(state.agents.values()), [state.agents]);
 
-  const { costPerAgent, totalUsd, costMap, costSource, coveragePct } = useMemo(() => {
+  const { costPerAgent, totalUsd, costMap, costSource, coveragePct, tokenTotals } = useMemo(() => {
     const perAgent: Array<{ agentId: string; agentName: string; usd: number }> = [];
     const costMap = new Map<string, number>();
     let totalUsd = 0;
     let costSource: CostSource = "tool_count_fallback";
     let coveragePct: number | undefined;
+    // Aggregate token counts by type for the breakdown + cache-efficiency stat.
+    const tokenTotals = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
     if (serverInsights) {
       let measuredCount = 0;
@@ -902,6 +996,10 @@ export default function InsightsView({ state }: InsightsViewProps) {
         totalUsd += a.usd;
         total++;
         if (a.source === "measured") measuredCount++;
+        tokenTotals.input += a.inputTokens;
+        tokenTotals.output += a.outputTokens;
+        tokenTotals.cacheRead += a.cacheReadTokens;
+        tokenTotals.cacheWrite += a.cacheCreationTokens;
       }
       totalUsd = serverInsights.costEstimate.totalUsd;
       if (serverInsights.costEstimate.source) costSource = serverInsights.costEstimate.source;
@@ -924,9 +1022,11 @@ export default function InsightsView({ state }: InsightsViewProps) {
         perAgent.push({ agentId: agent.id, agentName: agent.name, usd });
         costMap.set(agent.id, usd);
         totalUsd += usd;
+        tokenTotals.input += input;
+        tokenTotals.output += output;
       }
     }
-    return { costPerAgent: perAgent, totalUsd, costMap, costSource, coveragePct };
+    return { costPerAgent: perAgent, totalUsd, costMap, costSource, coveragePct, tokenTotals };
   }, [serverInsights, state]);
 
   const baselinesMap = useMemo(
@@ -1089,6 +1189,9 @@ export default function InsightsView({ state }: InsightsViewProps) {
           source={costSource}
           coveragePct={coveragePct}
         />
+        <div className="mt-3 pt-3 border-t border-[var(--border)]">
+          <TokenBreakdown tokens={tokenTotals} />
+        </div>
       </section>
 
       {/* Bottleneck */}
