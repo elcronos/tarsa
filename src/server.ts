@@ -18,7 +18,7 @@ import { isBun } from "./runtime.js";
 import type { EventProcessor } from "./processor.js";
 import type { Database } from "./db.js";
 import type { Event, State } from "./models.js";
-import { bottleneck, costEstimate, contextUsage, parallelismGaps, stuckSignals, errorRecovery, agentPerformanceTable, agentTypeProfiles, pricedCoveragePercent, sessionCostBreakdown, commitCostBreakdown } from "./insights.js";
+import { bottleneck, costEstimate, contextUsage, parallelismGaps, stuckSignals, errorRecovery, agentPerformanceTable, agentTypeProfiles, pricedCoveragePercent, sessionCostBreakdown, commitCostBreakdown, fluencyScore } from "./insights.js";
 import { searchEvents, indexEvent, buildIndex } from "./search.js";
 import { detectBudgetExceeded } from "./insights.js";
 import { readTranscript, readAgentTokens, firstUserMessage, lastAssistantMessage, readTranscriptByPath } from "./transcript.js";
@@ -580,6 +580,7 @@ export function createApp(opts: ServerOptions): Hono {
     const recovery = errorRecovery(state);
     const agentPerf = agentPerformanceTable(state, cost);
     const typeProfiles = agentTypeProfiles(state);
+    const fluency = fluencyScore(state);
 
     return c.json({
       bottleneck: {
@@ -599,6 +600,7 @@ export function createApp(opts: ServerOptions): Hono {
       errorRecovery: recovery,
       agentPerformance: agentPerf,
       agentTypeProfiles: typeProfiles,
+      fluencyScore: fluency,
     });
   });
 

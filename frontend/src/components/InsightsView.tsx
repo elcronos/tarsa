@@ -110,6 +110,23 @@ interface InsightsData {
   agentPerformance?: AgentPerfRow[];
   agentTypeProfiles?: AgentTypeProfile[];
   contextUsage?: { perAgent: ContextUsageRow[] };
+  fluencyScore?: FluencyScoreData | null;
+}
+
+type FluencyGrade = "A" | "B" | "C" | "D" | "F";
+
+interface FluencyComponentData {
+  key: "error_rate" | "recovery" | "focus" | "parallelism";
+  label: string;
+  score: number;
+  weight: number;
+  detail: string;
+}
+
+interface FluencyScoreData {
+  score: number;
+  grade: FluencyGrade;
+  components: FluencyComponentData[];
 }
 
 // ── Client-side stuck detection (mirrors server heuristic) ───────────────────
@@ -775,6 +792,71 @@ function RalphIterationsCard({ state }: { state: State }) {
   );
 }
 
+// ── AI Fluency Score card ────────────────────────────────────────────────────
+
+const GRADE_COLOR: Record<FluencyGrade, string> = {
+  A: "var(--ok, #34d399)",
+  B: "var(--ok, #34d399)",
+  C: "var(--warn, #fbbf24)",
+  D: "var(--warn, #fbbf24)",
+  F: "var(--error, #f87171)",
+};
+
+function barColor(score: number): string {
+  if (score >= 80) return "var(--ok, #34d399)";
+  if (score >= 60) return "var(--warn, #fbbf24)";
+  return "var(--error, #f87171)";
+}
+
+function FluencyScoreCard({ data }: { data: FluencyScoreData }) {
+  const gradeColor = GRADE_COLOR[data.grade];
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <div
+          className="flex items-baseline gap-1 font-mono"
+          style={{ color: gradeColor }}
+        >
+          <span className="text-3xl font-semibold tabular-nums">{data.score}</span>
+          <span className="text-sm text-[var(--fg-subtle)]">/100</span>
+        </div>
+        <div
+          className="flex h-7 w-7 items-center justify-center rounded font-mono text-base font-semibold"
+          style={{ background: `${gradeColor}22`, color: gradeColor }}
+        >
+          {data.grade}
+        </div>
+        <div className="text-[10px] font-mono text-[var(--fg-subtle)] leading-tight">
+          how effectively this
+          <br />
+          session collaborates with AI
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {data.components.map((c) => (
+          <div key={c.key} className="flex items-center gap-2" title={c.detail}>
+            <span className="w-28 shrink-0 truncate text-[10px] font-mono text-[var(--fg-muted)]">
+              {c.label}
+            </span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded bg-[var(--surface-raised)]">
+              <div
+                className="h-full rounded"
+                style={{ width: `${c.score}%`, background: barColor(c.score) }}
+              />
+            </div>
+            <span className="w-8 shrink-0 text-right text-[10px] font-mono tabular-nums text-[var(--fg-subtle)]">
+              {c.score}
+            </span>
+            <span className="w-9 shrink-0 text-right text-[9px] font-mono text-[var(--fg-subtle)]/70">
+              {Math.round(c.weight * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function InsightsView({ state }: InsightsViewProps) {
@@ -931,8 +1013,20 @@ export default function InsightsView({ state }: InsightsViewProps) {
     return <EmptyState message="No insights yet — needs at least one completed session" />;
   }
 
+  const fluency = serverInsights?.fluencyScore ?? null;
+
   return (
     <div className="h-full overflow-y-auto p-4 space-y-4">
+      {/* AI Fluency Score */}
+      {fluency && (
+        <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-3">
+            AI Fluency Score
+          </div>
+          <FluencyScoreCard data={fluency} />
+        </section>
+      )}
+
       {/* Budget card */}
       <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
         <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-3">

@@ -862,3 +862,129 @@ export function zScoreBadge(
   if (z > 1) return "slow";
   return "normal";
 }
+
+// ── AI Fluency Score ──────────────────────────────────────────────────────
+
+export type FluencyGrade = "A" | "B" | "C" | "D" | "F";
+
+export interface FluencyComponent {
+  /** Stable key for the UI. */
+  key: "error_rate" | "recovery" | "focus" | "parallelism";
+  label: string;
+  /** 0-100 component score. */
+  score: number;
+  /** Weight applied to this component in the total (weights sum to 1). */
+  weight: number;
+  /** One-line plain-English explanation. */
+  detail: string;
+}
+
+export interface FluencyScoreResult {
+  /** 0-100 overall score. */
+  score: number;
+  grade: FluencyGrade;
+  components: FluencyComponent[];
+}
+
+function gradeFor(score: number): FluencyGrade {
+  if (score >= 90) return "A";
+  if (score >= 80) return "B";
+  if (score >= 70) return "C";
+  if (score >= 60) return "D";
+  return "F";
+}
+
+/**
+ * AI Fluency Score — a single 0-100 measure of how effectively the user's
+ * Claude Code sessions collaborate with the agents.
+ *
+ * Pure derive over reducer state: reuses errorRecovery / stuckSignals /
+ * parallelismGaps. Returns null when there are no agents to score.
+ *
+ * Components (weighted):
+ *   - error_rate  (0.30): clean tool execution — few PostToolUse failures
+ *   - recovery    (0.25): when tools do fail, they get retried successfully
+ *   - focus       (0.25): no loops / repeated-tool thrashing (stuck signals)
+ *   - parallelism (0.20): independent agents weren't run strictly sequentially
+ */
+export function fluencyScore(state: State): FluencyScoreResult | null {
+  const agents = Array.from(state.agents.values());
+  if (agents.length === 0) return null;
+
+  // error_rate — PostToolUse failures vs total tool calls
+  let totalTools = 0;
+  let totalErrors = 0;
+  for (const agent of agents) {
+    totalTools += agent.tool_count;
+    totalErrors += agent.error_count;
+  }
+  const errorRate = totalTools > 0 ? totalErrors / totalTools : 0;
+  const errorScore = Math.round((1 - Math.min(errorRate, 1)) * 100);
+
+  // recovery — of failed tool calls, fraction retried to success
+  const recovery = errorRecovery(state);
+  const recovered = recovery.filter((r) => r.recovery === "retried_succeeded").length;
+  const recoveryScore =
+    recovery.length === 0
+      ? 100 // nothing failed — nothing to recover from
+      : Math.round((recovered / recovery.length) * 100);
+
+  // focus — stuck signals (repeated tools / consecutive failures)
+  const stuck = stuckSignals(state);
+  const focusScore = Math.round((1 - Math.min(stuck.length / agents.length, 1)) * 100);
+
+  // parallelism — sibling agents that ran sequentially with no dependency
+  const gaps = parallelismGaps(state);
+  const parallelismScore = Math.round(
+    (1 - Math.min(gaps.length / agents.length, 1)) * 100
+  );
+
+  const components: FluencyComponent[] = [
+    {
+      key: "error_rate",
+      label: "Clean execution",
+      score: errorScore,
+      weight: 0.3,
+      detail:
+        totalTools === 0
+          ? "No tool calls yet"
+          : `${totalErrors} error${totalErrors === 1 ? "" : "s"} across ${totalTools} tool call${totalTools === 1 ? "" : "s"} (${(errorRate * 100).toFixed(1)}%)`,
+    },
+    {
+      key: "recovery",
+      label: "Error recovery",
+      score: recoveryScore,
+      weight: 0.25,
+      detail:
+        recovery.length === 0
+          ? "No failures to recover from"
+          : `${recovered}/${recovery.length} failed tool${recovery.length === 1 ? "" : "s"} retried successfully`,
+    },
+    {
+      key: "focus",
+      label: "Focus",
+      score: focusScore,
+      weight: 0.25,
+      detail:
+        stuck.length === 0
+          ? "No stuck or looping agents"
+          : `${stuck.length} stuck signal${stuck.length === 1 ? "" : "s"} (repeated tools / consecutive failures)`,
+    },
+    {
+      key: "parallelism",
+      label: "Parallelism",
+      score: parallelismScore,
+      weight: 0.2,
+      detail:
+        gaps.length === 0
+          ? "No missed parallelisation opportunities"
+          : `${gaps.length} sibling agent pair${gaps.length === 1 ? "" : "s"} ran sequentially with no dependency`,
+    },
+  ];
+
+  const score = Math.round(
+    components.reduce((sum, c) => sum + c.score * c.weight, 0)
+  );
+
+  return { score, grade: gradeFor(score), components };
+}
