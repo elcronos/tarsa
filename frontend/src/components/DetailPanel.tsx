@@ -1343,14 +1343,118 @@ export default function DetailPanel({
           <ResultTab agent={agent} />
         )}
         {activeTab === "terminal" && (
-          <TerminalTab agent={agent} />
+          <TerminalTab agent={agent} toolCalls={toolCalls} />
         )}
       </div>
     </div>
   );
 }
 
-function TerminalTab({ agent }: { agent: Agent }) {
+// Live-activity view shown by the Terminal tab when the session is still
+// running. Resuming a live session would spawn a second `claude` on the same
+// transcript, so instead of a (stale) shell we surface what the agent is
+// doing right now: current tool call + recent tool-call history.
+function toolStatusGlyph(status: ToolCall["status"]): { glyph: string; cls: string } {
+  if (status === "running") return { glyph: "▶", cls: "text-blue-400" };
+  if (status === "error") return { glyph: "✕", cls: "text-red-400" };
+  return { glyph: "✓", cls: "text-emerald-400" };
+}
+
+function LiveActivityPanel({
+  agent,
+  toolCalls,
+  shellUrl,
+  cwd,
+}: {
+  agent: Agent;
+  toolCalls: ToolCall[];
+  shellUrl: string | null;
+  cwd: string | null;
+}) {
+  const current = toolCalls[toolCalls.length - 1];
+  const currentRunning = current?.status === "running";
+  const recent = useMemo(() => [...toolCalls].slice(-12).reverse(), [toolCalls]);
+
+  return (
+    <div className="flex flex-col gap-2 h-full">
+      <div className="flex items-center justify-between text-[9px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider">
+        <span className="flex items-center gap-1.5" title={cwd ?? ""}>
+          <span className="text-blue-400 animate-pulse">●</span>
+          running{cwd ? ` · ${cwd.split("/").slice(-2).join("/")}` : ` · ${agent.name}`}
+        </span>
+        {shellUrl && (
+          <a
+            href={shellUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[var(--accent)] hover:underline normal-case tracking-normal"
+            title="Open a fresh shell in this project (does not resume — that would conflict with the live session)"
+          >
+            open shell ↗
+          </a>
+        )}
+      </div>
+
+      {/* Current activity */}
+      <div className="rounded border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+        <div className="text-[9px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-1">
+          Current activity
+        </div>
+        {currentRunning && current ? (
+          <div className="flex items-start gap-1.5 text-[11px] font-mono">
+            <span className="text-blue-400 shrink-0">▶</span>
+            <span className="text-[var(--fg)] shrink-0">{current.tool_name}</span>
+            <span className="text-[var(--fg-subtle)] truncate">{current.input_preview}</span>
+          </div>
+        ) : (
+          <div className="text-[11px] font-mono text-[var(--fg-subtle)] flex items-center gap-1.5">
+            idle <LoadingDots />
+            <span className="text-[10px]">waiting for the agent's next step</span>
+          </div>
+        )}
+      </div>
+
+      {/* Recent tool-call history */}
+      <div className="flex-1 overflow-y-auto rounded border border-[var(--border)] bg-[var(--surface-raised)] p-2">
+        <div className="text-[9px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-1">
+          Recent activity ({toolCalls.length})
+        </div>
+        {recent.length === 0 ? (
+          <div className="text-[10px] font-mono text-[var(--fg-subtle)]">No tool calls yet</div>
+        ) : (
+          <div className="space-y-0.5">
+            {recent.map((tc) => {
+              const { glyph, cls } = toolStatusGlyph(tc.status);
+              return (
+                <div key={tc.id} className="flex items-center gap-1.5 text-[10px] font-mono">
+                  <span className={`${cls} shrink-0`}>{glyph}</span>
+                  <span className="text-[var(--fg-muted)] shrink-0">{tc.tool_name}</span>
+                  <span className="text-[var(--fg-subtle)] flex-1 truncate">
+                    {tc.input_preview}
+                  </span>
+                  {tc.duration_ms != null && (
+                    <span className="text-[var(--fg-subtle)] shrink-0 tabular-nums">
+                      {formatDuration(tc.duration_ms)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="text-[9px] font-mono text-[var(--fg-subtle)] leading-relaxed">
+        Session is live — this updates as the agent works. The embedded shell
+        becomes available (with <span className="text-[var(--fg-muted)]">--resume</span>)
+        once the session finishes; resuming now would conflict with the running
+        process.
+      </div>
+    </div>
+  );
+}
+
+function TerminalTab({ agent, toolCalls }: { agent: Agent; toolCalls: ToolCall[] }) {
   const [info, setInfo] = useState<{ enabled: boolean; port: number; token: string } | null>(
     null
   );
@@ -1455,13 +1559,33 @@ function TerminalTab({ agent }: { agent: Agent }) {
     );
   }
 
+  // A still-running session can't be resumed into an embedded shell — that
+  // would put a second `claude` on the same transcript. Only attach &resume=
+  // once the session has stopped.
+  const isRunning = agent.status === "active";
+
   // ?single=1 tells the patched cc-web to hide its session tab bar so the
   // user can't spawn extra sessions from the agent-scoped right panel.
   const url = `http://localhost:${info.port}/?token=${encodeURIComponent(info.token)}&single=1${
     ccSessionId ? `&session=${encodeURIComponent(ccSessionId)}` : ""
   }${
-    sessionInfo.claudeSessionId ? `&resume=${encodeURIComponent(sessionInfo.claudeSessionId)}` : ""
+    !isRunning && sessionInfo.claudeSessionId
+      ? `&resume=${encodeURIComponent(sessionInfo.claudeSessionId)}`
+      : ""
   }`;
+
+  // While the session is live, show the agent's current activity instead of a
+  // stale shell. The shell (with --resume) takes over once it finishes.
+  if (isRunning) {
+    return (
+      <LiveActivityPanel
+        agent={agent}
+        toolCalls={toolCalls}
+        shellUrl={url}
+        cwd={sessionInfo.cwd}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1 h-full">
