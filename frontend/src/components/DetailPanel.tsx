@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import type { Agent, Event, Session, ToolCall, CostSource } from "../types";
 import { formatDuration, formatCost, formatTime } from "../utils/format";
 import { extractFilesTouched } from "../utils/files";
+import SessionCostCard from "./SessionCostCard";
 import IOPair from "./IOPair";
 import JsonView, { tryParseJson } from "./JsonView";
 import Markdown, { looksLikeMarkdown } from "./Markdown";
@@ -1291,6 +1292,7 @@ export default function DetailPanel({
             {agent.subagent_type ?? "root agent"}
           </div>
           {session && <GitBadge session={session} />}
+          <SessionCostCard sessionId={agent.session_id} />
         </div>
         <button
           onClick={onClose}

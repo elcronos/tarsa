@@ -18,7 +18,7 @@ import { isBun } from "./runtime.js";
 import type { EventProcessor } from "./processor.js";
 import type { Database } from "./db.js";
 import type { Event, State } from "./models.js";
-import { bottleneck, costEstimate, contextUsage, parallelismGaps, stuckSignals, errorRecovery, agentPerformanceTable, agentTypeProfiles, pricedCoveragePercent } from "./insights.js";
+import { bottleneck, costEstimate, contextUsage, parallelismGaps, stuckSignals, errorRecovery, agentPerformanceTable, agentTypeProfiles, pricedCoveragePercent, sessionCostBreakdown } from "./insights.js";
 import { searchEvents, indexEvent, buildIndex } from "./search.js";
 import { detectBudgetExceeded } from "./insights.js";
 import { readTranscript, readAgentTokens, firstUserMessage, lastAssistantMessage, readTranscriptByPath } from "./transcript.js";
@@ -431,6 +431,22 @@ export function createApp(opts: ServerOptions): Hono {
       (a) => a.session_id === id
     );
     return c.json({ session, events, agents });
+  });
+
+  // ── GET /api/sessions/:id/cost ─────────────────────────────────────
+  app.get("/api/sessions/:id/cost", (c) => {
+    const id = c.req.param("id");
+    const persisted = db.getSession(id);
+    const liveSession = processor.state.sessions.get(id);
+    if (!persisted && !liveSession) {
+      return c.json({ error: "session not found" }, 404);
+    }
+    // Merge persisted + live events
+    const persistedEvents = persisted ? db.getEventsBySession(id) : [];
+    const liveEvents = processor.events.filter((e) => e.session_id === id);
+    const events = persistedEvents.length > 0 ? persistedEvents : liveEvents;
+    c.header("Cache-Control", "no-store");
+    return c.json(sessionCostBreakdown(id, events as Array<{ [key: string]: unknown }>));
   });
 
   // ── GET /api/insights ───────────────────────────────────────────────

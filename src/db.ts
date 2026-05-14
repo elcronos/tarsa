@@ -35,6 +35,7 @@ export interface Database {
   queryEvents(sessionId: string, limit?: number): Event[];
   queryAllEvents(limit: number): Event[];
   getEventsByCommit(commit: string): Event[];
+  getEventsBySession(sessionId: string): Event[];
   queryBaselines(agentType: string): BaselineRow | null;
   listAllBaselines(): BaselineRow[];
   listSessions(): Session[];
@@ -500,6 +501,36 @@ class SqliteDatabase implements Database {
          ORDER BY ts ASC`
       )
       .all(commit) as Array<{
+        id: string;
+        session_id: string;
+        ts: number;
+        hook_event: string;
+        agent_id: string | null;
+        tool_name: string | null;
+        payload: string;
+      }>;
+
+    return rows.map((r) => {
+      const payload = JSON.parse(r.payload) as Record<string, unknown>;
+      return {
+        ...payload,
+        id: r.id,
+        session_id: r.session_id,
+        ts: r.ts,
+        hook_event: r.hook_event,
+        ...(r.agent_id != null ? { agent_id: r.agent_id } : {}),
+        ...(r.tool_name != null ? { tool_name: r.tool_name } : {}),
+      } as Event;
+    });
+  }
+
+  getEventsBySession(sessionId: string): Event[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, session_id, ts, hook_event, agent_id, tool_name, payload
+         FROM events WHERE session_id = ? ORDER BY ts ASC`
+      )
+      .all(sessionId) as Array<{
         id: string;
         session_id: string;
         ts: number;

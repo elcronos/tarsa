@@ -80,6 +80,41 @@ export interface CostEstimateResultWithSource {
   source: "measured" | "estimated_chars" | "tool_count_fallback";
 }
 
+// ── Shared per-event token fold helper ───────────────────────────────────
+
+interface EventTokens {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  model: ModelKey;
+}
+
+/**
+ * Fold token fields from a single event into an accumulator.
+ * Shared between costEstimate (live state) and sessionCostBreakdown (historical events).
+ */
+export function foldEventTokens(
+  acc: EventTokens,
+  event: { [key: string]: unknown }
+): EventTokens {
+  const it = event["input_tokens"];
+  const ot = event["output_tokens"];
+  const cr = event["cache_read"];
+  const cw = event["cache_creation"];
+  const m = event["model"];
+  let { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, model } = acc;
+  if (typeof it === "number") inputTokens += it;
+  if (typeof ot === "number") outputTokens += ot;
+  if (typeof cr === "number") cacheReadTokens += cr;
+  if (typeof cw === "number") cacheCreationTokens += cw;
+  if (typeof m === "string") {
+    const detected = detectModel(m);
+    if (detected !== "sonnet") model = detected;
+  }
+  return { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, model };
+}
+
 /**
  * Estimate USD cost per agent.
  *
@@ -120,24 +155,17 @@ export function costEstimate(
     }
 
     if (source === "tool_count_fallback") {
-      // Aggregate token data from events belonging to this agent
+      // Aggregate token data from events belonging to this agent using shared helper
+      let acc: EventTokens = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, model: "sonnet" };
       for (const event of state.events) {
         if (event.agent_id !== agent.id) continue;
-        const it = event["input_tokens"];
-        const ot = event["output_tokens"];
-        const cr = event["cache_read"];
-        const cw = event["cache_creation"];
-        const m = event["model"];
-        if (typeof it === "number") inputTokens += it;
-        if (typeof ot === "number") outputTokens += ot;
-        if (typeof cr === "number") cacheReadTokens += cr;
-        if (typeof cw === "number") cacheCreationTokens += cw;
-        if (typeof m === "string") {
-          const detected = detectModel(m);
-          // Promote sonnet → opus/haiku if observed; never demote
-          if (detected !== "sonnet") model = detected;
-        }
+        acc = foldEventTokens(acc, event as { [key: string]: unknown });
       }
+      inputTokens = acc.inputTokens;
+      outputTokens = acc.outputTokens;
+      cacheReadTokens = acc.cacheReadTokens;
+      cacheCreationTokens = acc.cacheCreationTokens;
+      model = acc.model;
     }
 
     // Char-based fallback: sum chars from tool_calls when no token data found
@@ -192,6 +220,106 @@ export function costEstimate(
     perAgent,
     totalUsd: Math.round(totalUsd * 1_000_000) / 1_000_000,
     source: anyMeasured ? "measured" : anyCharEstimated ? "estimated_chars" : "tool_count_fallback",
+  };
+}
+
+// ── Per-session cost breakdown ────────────────────────────────────────────
+
+export interface SessionCostRow {
+  agentId: string;
+  agentName: string | null;
+  model: ModelKey;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  usd: number;
+  source: "measured" | "estimated_chars" | "tool_count_fallback";
+}
+
+export interface SessionCostResult {
+  sessionId: string;
+  totalUsd: number;
+  coveragePercent: number;
+  perAgent: SessionCostRow[];
+  perModel: Record<ModelKey, { usd: number; tokens: number }>;
+  eventCount: number;
+}
+
+/**
+ * Pure function: compute per-session cost from a flat event array.
+ * Works post-mortem from sqlite rows without needing live State.
+ * Uses foldEventTokens — zero duplication with costEstimate.
+ */
+export function sessionCostBreakdown(
+  sessionId: string,
+  events: Array<{ [key: string]: unknown }>
+): SessionCostResult {
+  // Group events by agent_id
+  const agentEvents = new Map<string, Array<{ [key: string]: unknown }>>();
+  for (const ev of events) {
+    const agentId = typeof ev["agent_id"] === "string" ? ev["agent_id"] : "_unknown";
+    const arr = agentEvents.get(agentId) ?? [];
+    arr.push(ev);
+    agentEvents.set(agentId, arr);
+  }
+
+  const perAgent: SessionCostRow[] = [];
+  const perModel: Record<ModelKey, { usd: number; tokens: number }> = {
+    sonnet: { usd: 0, tokens: 0 },
+    opus: { usd: 0, tokens: 0 },
+    haiku: { usd: 0, tokens: 0 },
+  };
+  let totalUsd = 0;
+
+  for (const [agentId, agentEvs] of agentEvents) {
+    let acc: EventTokens = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, model: "sonnet" };
+    let agentName: string | null = null;
+
+    for (const ev of agentEvs) {
+      acc = foldEventTokens(acc, ev);
+      if (agentName === null && typeof ev["agent_name"] === "string") {
+        agentName = ev["agent_name"];
+      }
+    }
+
+    const { inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, model } = acc;
+    const hasTokens = inputTokens > 0 || outputTokens > 0 || cacheReadTokens > 0 || cacheCreationTokens > 0;
+    const source: SessionCostRow["source"] = hasTokens ? "measured" : "tool_count_fallback";
+
+    const usd = priceUsd(inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens, model);
+    const roundedUsd = Math.round(usd * 1_000_000) / 1_000_000;
+    totalUsd += usd;
+
+    const totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens;
+    perModel[model].usd += roundedUsd;
+    perModel[model].tokens += totalTokens;
+
+    perAgent.push({
+      agentId,
+      agentName,
+      model,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      usd: roundedUsd,
+      source,
+    });
+  }
+
+  const measuredCount = perAgent.filter((a) => a.source === "measured").length;
+  const coveragePercent = perAgent.length === 0
+    ? 100
+    : Math.round((measuredCount / perAgent.length) * 100);
+
+  return {
+    sessionId,
+    totalUsd: Math.round(totalUsd * 1_000_000) / 1_000_000,
+    coveragePercent,
+    perAgent,
+    perModel,
+    eventCount: events.length,
   };
 }
 
