@@ -253,7 +253,7 @@ export default function TopBar({
       <div className="w-px h-4 bg-[var(--border)] shrink-0" />
 
       {/* View tabs */}
-      <nav className="flex items-center gap-0.5 flex-1">
+      <nav className="flex items-center gap-0.5 flex-1 min-w-0 overflow-x-auto">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -295,7 +295,7 @@ export default function TopBar({
         {insights && insights.stuckCount > 0 && (
           <button
             onClick={() => onViewChange("insights")}
-            className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-[10px] font-mono text-amber-400 hover:bg-amber-500/20 transition-colors cursor-pointer"
+            className="hidden xl:flex items-center gap-1 px-2 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-[10px] font-mono text-amber-400 hover:bg-amber-500/20 transition-colors cursor-pointer"
             title="Stuck agents detected — click to view Insights"
           >
             <span>⚠</span>
@@ -307,7 +307,7 @@ export default function TopBar({
         {insights && selectedSessionId && (
           <button
             onClick={() => onViewChange("insights")}
-            className={`hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded border border-[var(--border)] text-[10px] font-mono transition-colors cursor-pointer hover:bg-[var(--surface-raised)] ${
+            className={`hidden xl:flex items-center gap-1.5 px-2 py-0.5 rounded border border-[var(--border)] text-[10px] font-mono transition-colors cursor-pointer hover:bg-[var(--surface-raised)] ${
               insights.costSource === "measured"
                 ? "text-[var(--fg-muted)]"
                 : "text-amber-400"
@@ -358,7 +358,7 @@ export default function TopBar({
           const tooltipLabel = `$${insights.totalUsd.toFixed(2)} / $${sessionBudgetUsd.toFixed(2)} (${Math.round(pct * 100)}%)`;
           return (
             <span
-              className="hidden sm:inline-flex items-center shrink-0"
+              className="hidden xl:inline-flex items-center shrink-0"
               title={tooltipLabel}
             >
               <span
@@ -378,7 +378,7 @@ export default function TopBar({
         {projectNames && projectNames.length > 0 && onProjectFilterChange && (
           <button
             onClick={handleProjectCycle}
-            className={`hidden sm:flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-mono transition-colors ${
+            className={`hidden xl:flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-mono transition-colors ${
               activeProject
                 ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
                 : "border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg-muted)]"
@@ -395,7 +395,7 @@ export default function TopBar({
         {/* Session history clock icon */}
         <button
           onClick={onHistoryOpen}
-          className="hidden sm:flex items-center justify-center w-6 h-6 rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] transition-colors cursor-pointer"
+          className="hidden lg:flex items-center justify-center w-6 h-6 rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] transition-colors cursor-pointer"
           title="Session history"
           aria-label="Session history"
         >
@@ -417,7 +417,7 @@ export default function TopBar({
         {/* Archive — recently closed sessions */}
         <button
           onClick={onArchiveOpen}
-          className="hidden sm:flex items-center justify-center w-6 h-6 rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] transition-colors cursor-pointer"
+          className="hidden lg:flex items-center justify-center w-6 h-6 rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] transition-colors cursor-pointer"
           title="Recently closed sessions"
           aria-label="Recently closed sessions"
         >
@@ -440,7 +440,7 @@ export default function TopBar({
         {/* D5 — Search input affordance */}
         <button
           onClick={onSearchOpen}
-          className="hidden sm:flex items-center justify-between w-48 px-2.5 py-0.5 rounded border border-[var(--border)] text-[10px] font-mono text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] hover:border-[var(--fg-subtle)] transition-colors cursor-pointer"
+          className="hidden md:flex items-center justify-between w-40 xl:w-48 px-2.5 py-0.5 rounded border border-[var(--border)] text-[10px] font-mono text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] hover:border-[var(--fg-subtle)] transition-colors cursor-pointer"
           title="Search (⌘K)"
         >
           <span>Search events...</span>
@@ -473,7 +473,7 @@ export default function TopBar({
         {selectedSessionId && (
           <button
             onClick={handleCopyLink}
-            className="hidden sm:flex items-center justify-center w-6 h-6 rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors cursor-pointer"
+            className="hidden lg:flex items-center justify-center w-6 h-6 rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors cursor-pointer"
             title="Copy session link"
             aria-label="Copy session link"
           >
@@ -488,7 +488,7 @@ export default function TopBar({
         {selectedSessionId && (
           <button
             onClick={handleExport}
-            className="hidden sm:flex items-center justify-center w-6 h-6 rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors cursor-pointer"
+            className="hidden lg:flex items-center justify-center w-6 h-6 rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--accent)] hover:border-[var(--accent)] transition-colors cursor-pointer"
             title="Export session to JSON"
             aria-label="Export session JSON"
           >
