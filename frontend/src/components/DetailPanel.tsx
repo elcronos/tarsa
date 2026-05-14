@@ -1486,10 +1486,12 @@ function TerminalTab({ agent }: { agent: Agent }) {
         //   allow-scripts        — vultuk is a JS app
         //   allow-same-origin    — it makes same-origin XHR/WS to itself
         //   allow-forms          — auth form (kept even though we bypass)
-        //   allow-clipboard-write — copy from terminal output
         // Notably absent: allow-top-navigation (no escape from Tarsa frame),
         // allow-popups (no new windows), allow-modals (no native dialogs).
-        sandbox="allow-scripts allow-same-origin allow-forms allow-clipboard-write"
+        sandbox="allow-scripts allow-same-origin allow-forms"
+        // Clipboard is a Permissions-Policy feature, not a sandbox token —
+        // it must go in `allow`, not `sandbox` (copy from terminal output).
+        allow="clipboard-read; clipboard-write"
         // No-referrer in addition to the meta tag inside vultuk so initial
         // sub-resource fetches from CDNs never see the auth token.
         referrerPolicy="no-referrer"

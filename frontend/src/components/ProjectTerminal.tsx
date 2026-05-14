@@ -115,7 +115,8 @@ export default function ProjectTerminal({ cwd, name }: ProjectTerminalProps) {
         // pre-created session for the new project.
         key={cwd}
         src={url}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-clipboard-write"
+        sandbox="allow-scripts allow-same-origin allow-forms"
+        allow="clipboard-read; clipboard-write"
         referrerPolicy="no-referrer"
         className="flex-1 w-full bg-black"
       />

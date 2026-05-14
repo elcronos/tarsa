@@ -771,7 +771,8 @@ function FolderPickerDock({
         <iframe
           title="Folder picker"
           src={`http://localhost:${info.port}/?token=${encodeURIComponent(info.token)}&action=newproject`}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-clipboard-write"
+          sandbox="allow-scripts allow-same-origin allow-forms"
+          allow="clipboard-read; clipboard-write"
           referrerPolicy="no-referrer"
           className="flex-1 w-full bg-black"
         />
