@@ -954,6 +954,28 @@ export function applyEvent(state: State, e: Event): State {
     }
   }
 
+  // Propagate git context from event onto session.
+  // First event with git fields sets branch/dirty; subsequent events update
+  // git_commit only when the commit changes (captures mid-session rebases).
+  const evCommit = typeof e["git_commit"] === "string" ? e["git_commit"] : undefined;
+  const evBranch = typeof e["git_branch"] === "string" ? e["git_branch"] : undefined;
+  const evDirty = typeof e["git_dirty"] === "boolean" ? e["git_dirty"] : undefined;
+  if (evCommit !== undefined) {
+    const session = next.sessions.get(sessionId);
+    if (session) {
+      const needsInit = session.git_commit === undefined;
+      const commitChanged = !needsInit && session.git_commit !== evCommit;
+      if (needsInit || commitChanged) {
+        next = setSession(next, sessionId, {
+          ...session,
+          git_commit: evCommit,
+          git_branch: needsInit ? evBranch : session.git_branch,
+          git_dirty: needsInit ? evDirty : session.git_dirty,
+        });
+      }
+    }
+  }
+
   // Auto-discover agent from agent_id field
   if (normalizedEvent.agent_id) {
     next = ensureAgent(

@@ -14,6 +14,7 @@
 import { installHooks, uninstallHooks, upgradeHooks, JSONL_PATH } from "./hooks.js";
 import { migrateLegacyDbIfPresent } from "./migrations.js";
 import { cwdFromTranscriptPath } from "./transcript.js";
+import { getGitContext } from "./git.js";
 import { tailJsonl } from "./tailer.js";
 import { CcWebSupervisor } from "./cc-web-supervisor.js";
 import { EventProcessor } from "./processor.js";
@@ -156,6 +157,20 @@ async function appendEvent(eventName: string): Promise<void> {
   // stay pure (no env access in shared/replay-core.ts). Empty string when
   // unset — reducer treats only "1" as positive.
   payload["ralph_active"] = process.env["RALPH_ACTIVE"] ?? "";
+  // Capture git context from cwd at event-write time. Fall back to process.cwd()
+  // when the hook payload doesn't include a cwd. Omit keys entirely on null
+  // (non-git dir, timeout, error) to avoid null-litter in events.
+  const eventCwd = typeof payload["cwd"] === "string" ? payload["cwd"] : process.cwd();
+  try {
+    const git = getGitContext(eventCwd);
+    if (git !== null) {
+      payload["git_commit"] = git.commit;
+      payload["git_branch"] = git.branch;
+      payload["git_dirty"] = git.dirty;
+    }
+  } catch {
+    // Never let git errors propagate into hook execution
+  }
   const line = JSON.stringify(payload) + "\n";
   const fd = fs.openSync(JSONL_PATH, "a", 0o600);
   try {

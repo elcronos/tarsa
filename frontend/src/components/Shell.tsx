@@ -424,6 +424,7 @@ export default function Shell({
       {selectedAgent && (
         <DetailPanel
           agent={selectedAgent}
+          session={sessions.find((s) => s.id === selectedAgent.session_id)}
           events={events}
           toolCalls={agentToolCalls}
           onClose={onClearAgent}

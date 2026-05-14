@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import type { Agent, Event, ToolCall, CostSource } from "../types";
+import type { Agent, Event, Session, ToolCall, CostSource } from "../types";
 import { formatDuration, formatCost, formatTime } from "../utils/format";
 import { extractFilesTouched } from "../utils/files";
 import IOPair from "./IOPair";
@@ -33,6 +33,7 @@ function CostProvenanceBadge({ source }: { source: CostSource }) {
 
 interface DetailPanelProps {
   agent: Agent;
+  session?: Session;
   events: Event[];
   toolCalls: ToolCall[];
   onClose: () => void;
@@ -1218,10 +1219,50 @@ function ResultTab({ agent }: { agent: Agent }) {
   );
 }
 
+// ── GitBadge ─────────────────────────────────────────────────────────────────
+
+function GitBadge({ session }: { session: Session }) {
+  const [copied, setCopied] = useState(false);
+  const { git_commit, git_branch, git_dirty } = session;
+  if (!git_commit) return null;
+
+  const shortSha = git_commit.slice(0, 7);
+
+  const copySha = () => {
+    navigator.clipboard.writeText(git_commit).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1000);
+    }).catch(() => {});
+  };
+
+  return (
+    <div className="flex items-center gap-1.5 mt-0.5">
+      {git_branch && (
+        <span className="text-[9px] font-mono text-[var(--fg-subtle)]">{git_branch}</span>
+      )}
+      {git_branch && <span className="text-[9px] text-[var(--fg-subtle)] opacity-40">·</span>}
+      <button
+        onClick={copySha}
+        title={copied ? "Copied!" : `Copy full SHA: ${git_commit}`}
+        className="text-[9px] font-mono text-[var(--fg-subtle)] hover:text-[var(--accent)] transition-colors"
+      >
+        {copied ? "Copied!" : shortSha}
+      </button>
+      {git_dirty && (
+        <>
+          <span className="text-[9px] text-[var(--fg-subtle)] opacity-40">·</span>
+          <span className="text-[9px] font-mono text-amber-400" title="Uncommitted changes">●</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function DetailPanel({
   agent,
+  session,
   events,
   toolCalls,
   onClose,
@@ -1249,6 +1290,7 @@ export default function DetailPanel({
           <div className="text-[10px] font-mono text-[var(--fg-subtle)]">
             {agent.subagent_type ?? "root agent"}
           </div>
+          {session && <GitBadge session={session} />}
         </div>
         <button
           onClick={onClose}

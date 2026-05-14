@@ -34,6 +34,7 @@ export interface Database {
   insertEvent(e: Event): void;
   queryEvents(sessionId: string, limit?: number): Event[];
   queryAllEvents(limit: number): Event[];
+  getEventsByCommit(commit: string): Event[];
   queryBaselines(agentType: string): BaselineRow | null;
   listAllBaselines(): BaselineRow[];
   listSessions(): Session[];
@@ -78,15 +79,18 @@ class SqliteDatabase implements Database {
       .prepare(
         `INSERT INTO sessions
            (id, started_at, ended_at, project_path, root_agent_id, status, name,
-            cwd, budget_usd, kill_on_exceed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            cwd, budget_usd, kill_on_exceed, git_commit, git_branch, git_dirty)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            ended_at = COALESCE(excluded.ended_at, ended_at),
            status = excluded.status,
            name = COALESCE(excluded.name, name),
            cwd = COALESCE(excluded.cwd, cwd),
            budget_usd = COALESCE(excluded.budget_usd, budget_usd),
-           kill_on_exceed = COALESCE(excluded.kill_on_exceed, kill_on_exceed)`
+           kill_on_exceed = COALESCE(excluded.kill_on_exceed, kill_on_exceed),
+           git_commit = COALESCE(excluded.git_commit, git_commit),
+           git_branch = COALESCE(excluded.git_branch, git_branch),
+           git_dirty = COALESCE(excluded.git_dirty, git_dirty)`
       )
       .run(
         s.id,
@@ -98,7 +102,10 @@ class SqliteDatabase implements Database {
         s.name ?? null,
         s.cwd ?? null,
         s.budget_usd ?? null,
-        s.kill_on_exceed == null ? null : (s.kill_on_exceed ? 1 : 0)
+        s.kill_on_exceed == null ? null : (s.kill_on_exceed ? 1 : 0),
+        s.git_commit ?? null,
+        s.git_branch ?? null,
+        s.git_dirty == null ? null : (s.git_dirty ? 1 : 0)
       );
   }
 
@@ -423,6 +430,9 @@ class SqliteDatabase implements Database {
         cwd: string | null;
         budget_usd: number | null;
         kill_on_exceed: number | null;
+        git_commit: string | null;
+        git_branch: string | null;
+        git_dirty: number | null;
       }>;
 
     return rows.map((r) => ({
@@ -436,6 +446,9 @@ class SqliteDatabase implements Database {
       cwd: r.cwd ?? undefined,
       budget_usd: r.budget_usd ?? undefined,
       kill_on_exceed: r.kill_on_exceed == null ? undefined : !!r.kill_on_exceed,
+      git_commit: r.git_commit ?? undefined,
+      git_branch: r.git_branch ?? undefined,
+      git_dirty: r.git_dirty == null ? undefined : !!r.git_dirty,
     }));
   }
 
@@ -454,6 +467,9 @@ class SqliteDatabase implements Database {
           cwd: string | null;
           budget_usd: number | null;
           kill_on_exceed: number | null;
+          git_commit: string | null;
+          git_branch: string | null;
+          git_dirty: number | null;
         }
       | undefined;
 
@@ -469,7 +485,42 @@ class SqliteDatabase implements Database {
       cwd: row.cwd ?? undefined,
       budget_usd: row.budget_usd ?? undefined,
       kill_on_exceed: row.kill_on_exceed == null ? undefined : !!row.kill_on_exceed,
+      git_commit: row.git_commit ?? undefined,
+      git_branch: row.git_branch ?? undefined,
+      git_dirty: row.git_dirty == null ? undefined : !!row.git_dirty,
     };
+  }
+
+  getEventsByCommit(commit: string): Event[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, session_id, ts, hook_event, agent_id, tool_name, payload
+         FROM events
+         WHERE json_extract(payload, '$.git_commit') = ?
+         ORDER BY ts ASC`
+      )
+      .all(commit) as Array<{
+        id: string;
+        session_id: string;
+        ts: number;
+        hook_event: string;
+        agent_id: string | null;
+        tool_name: string | null;
+        payload: string;
+      }>;
+
+    return rows.map((r) => {
+      const payload = JSON.parse(r.payload) as Record<string, unknown>;
+      return {
+        ...payload,
+        id: r.id,
+        session_id: r.session_id,
+        ts: r.ts,
+        hook_event: r.hook_event,
+        ...(r.agent_id != null ? { agent_id: r.agent_id } : {}),
+        ...(r.tool_name != null ? { tool_name: r.tool_name } : {}),
+      } as Event;
+    });
   }
 
   close(): void {

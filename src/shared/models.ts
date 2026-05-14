@@ -34,6 +34,10 @@ export interface Event {
   tool_input?: Record<string, unknown>;
   /** Raw response string for PostToolUse */
   tool_response?: string;
+  /** Git context captured at hook write time (omitted when not in a git repo) */
+  git_commit?: string;
+  git_branch?: string;
+  git_dirty?: boolean;
   /** Free-form payload fields passed through from the hook */
   [key: string]: unknown;
 }
@@ -101,6 +105,10 @@ export interface Session {
   cwd?: string;
   budget_usd?: number;
   kill_on_exceed?: boolean;
+  /** Git context from the first/latest event with git fields in this session */
+  git_commit?: string;
+  git_branch?: string;
+  git_dirty?: boolean;
 }
 
 /**

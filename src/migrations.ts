@@ -147,6 +147,14 @@ ALTER TABLE sessions ADD COLUMN kill_on_exceed INTEGER DEFAULT 0;
 CREATE INDEX IF NOT EXISTS iterations_session_idx ON iterations(session_id, n);
 COMMIT;`,
   },
+  {
+    // v6: git context columns on sessions table + index on event git_commit.
+    version: 6,
+    sql: `ALTER TABLE sessions ADD COLUMN git_commit TEXT;
+ALTER TABLE sessions ADD COLUMN git_branch TEXT;
+ALTER TABLE sessions ADD COLUMN git_dirty INTEGER;
+CREATE INDEX IF NOT EXISTS idx_events_git_commit ON events(json_extract(payload, '$.git_commit'));`,
+  },
 ];
 
 /**
@@ -265,6 +273,20 @@ export function applyMigrations(db: Migratable): void {
       } else if (migration.version === 4) {
         // v4 is a marker-only row; legacy DB copy happens in
         // migrateLegacyDbIfPresent before applyMigrations runs.
+      } else if (migration.version === 6) {
+        // v6: ALTER TABLE + CREATE INDEX — tolerate duplicate column/index errors.
+        for (const stmt of migration.sql.split(";")) {
+          const trimmed = stmt.trim();
+          if (!trimmed) continue;
+          try {
+            db.exec(trimmed);
+          } catch (err) {
+            const msg = String(err);
+            if (msg.includes("duplicate column name")) continue;
+            if (msg.includes("already exists")) continue;
+            throw err;
+          }
+        }
       } else if (migration.version === 5) {
         // v5 mixes ALTER TABLE + CREATE TABLE inside a transaction. If the
         // db was carried over from a partially upgraded install, individual
