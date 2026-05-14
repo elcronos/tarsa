@@ -8,20 +8,38 @@ import { EventProcessor } from "../src/processor.js";
 import type { ServerOptions } from "../src/server.js";
 
 // Minimal Database stub
-function makeDb() {
+function makeDb(sessions?: import("../src/shared/models.js").Session[]) {
   return {
-    listSessions: () => [],
+    listSessions: () => sessions ?? [],
     queryEvents: () => [],
     getSession: () => null,
     queryBaselines: () => null,
   } as unknown as import("../src/db.js").Database;
 }
 
-function makeOpts(processor?: EventProcessor): ServerOptions {
+function makeSession(
+  overrides: Partial<import("../src/shared/models.js").Session>
+): import("../src/shared/models.js").Session {
+  return {
+    id: "s1",
+    started_at: 1_000,
+    ended_at: null,
+    project_path: "/home/user/proj",
+    root_agent_id: "a1",
+    status: "active",
+    name: null,
+    ...overrides,
+  };
+}
+
+function makeOpts(
+  processor?: EventProcessor,
+  sessions?: import("../src/shared/models.js").Session[]
+): ServerOptions {
   return {
     port: 8199,
     processor: processor ?? new EventProcessor(),
-    db: makeDb(),
+    db: makeDb(sessions),
   };
 }
 
@@ -115,5 +133,33 @@ describe("CORS restriction", () => {
     // With a restricted allowlist, the origin header should not be echoed back
     const acao = res.headers.get("access-control-allow-origin");
     expect(acao).not.toBe("http://evil.example.com");
+  });
+});
+
+describe("GET /api/sessions?status=closed", () => {
+  it("returns only sessions with ended_at set", async () => {
+    const sessions = [
+      makeSession({ id: "s1", ended_at: 2_000, status: "complete" }),
+      makeSession({ id: "s2", ended_at: 3_000, status: "complete" }),
+      makeSession({ id: "s3", ended_at: null, status: "active" }),
+    ];
+    const app = createApp(makeOpts(undefined, sessions));
+    const res = await app.fetch(
+      new Request("http://localhost/api/sessions?status=closed")
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { id: string }[];
+    expect(data).toHaveLength(2);
+    expect(data.map((s) => s.id).sort()).toEqual(["s1", "s2"]);
+  });
+
+  it("returns 400 for unknown status value", async () => {
+    const app = createApp(makeOpts());
+    const res = await app.fetch(
+      new Request("http://localhost/api/sessions?status=bogus")
+    );
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toMatch(/bogus/);
   });
 });

@@ -437,6 +437,32 @@ export function createApp(opts: ServerOptions): Hono {
     return c.json({ status: "ok", session_id, usd, kill_on_exceed: kill_on_exceed === true });
   });
 
+  // ── GET /api/sessions ───────────────────────────────────────────────
+  // Returns persisted sessions. Accepts ?status=closed&limit=N.
+  // status=closed → WHERE ended_at IS NOT NULL, ordered ended_at DESC.
+  // Invalid status value → 400 JSON {error}.
+  app.get("/api/sessions", (c) => {
+    const status = c.req.query("status");
+    const limitParam = c.req.query("limit");
+    const limit = limitParam ? Math.min(Math.max(1, parseInt(limitParam, 10) || 50), 200) : 200;
+
+    if (status !== undefined && status !== "closed") {
+      return c.json({ error: `Invalid status value: ${status}. Supported: closed` }, 400);
+    }
+
+    const all = db.listSessions();
+    let sessions = all;
+    if (status === "closed") {
+      sessions = all
+        .filter((s) => s.ended_at != null)
+        .sort((a, b) => (b.ended_at ?? 0) - (a.ended_at ?? 0))
+        .slice(0, limit);
+    } else {
+      sessions = all.slice(0, limit);
+    }
+    return c.json(sessions);
+  });
+
   // ── GET /api/history ────────────────────────────────────────────────
   // Merges persisted DB sessions with currently-live in-memory sessions so
   // that compare/diff works for sessions that haven't ended yet.

@@ -17,6 +17,7 @@ import CommandPalette, { type CommandItem } from "./components/CommandPalette";
 import { useHotkey } from "./hooks/useHotkey";
 import GlobalView from "./components/GlobalView";
 import SessionHistory from "./components/SessionHistory";
+import RecentClosedSessions from "./components/RecentClosedSessions";
 import TeamView from "./components/TeamView";
 import MonitorView, { type InsightsPayload } from "./components/MonitorView";
 import { isTeamWorker } from "./utils/team";
@@ -44,6 +45,7 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => loadDismissed());
   const [statusFilter, setStatusFilter] = useState<StatusFilterSet>(() => ALL_STATUSES);
@@ -529,6 +531,7 @@ export default function App() {
         onReconnect={reconnect}
         onSearchOpen={() => setSearchOpen(true)}
         onHistoryOpen={() => setHistoryOpen((v) => !v)}
+        onArchiveOpen={() => setArchiveOpen((v) => !v)}
         lastError={lastError}
         reconnectAttempts={reconnectAttempts}
         projectNames={projectNames}
@@ -567,6 +570,14 @@ export default function App() {
           dismissedSessions={dismissedSessions}
           onRestore={handleRestoreSession}
           onClose={() => setHistoryOpen(false)}
+        />
+      )}
+
+      {/* Recently closed sessions popover */}
+      {archiveOpen && (
+        <RecentClosedSessions
+          onSelectSession={(id) => { handleSelectSession(id); }}
+          onClose={() => setArchiveOpen(false)}
         />
       )}
 

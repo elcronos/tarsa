@@ -27,6 +27,7 @@ interface TopBarProps {
   onReconnect: () => void;
   onSearchOpen?: () => void;
   onHistoryOpen?: () => void;
+  onArchiveOpen?: () => void;
   lastError?: string | null;
   reconnectAttempts?: number;
   /** Sorted list of unique project names for the filter chip */
@@ -143,6 +144,7 @@ export default function TopBar({
   sessionBudgetUsd,
   onNewTerminal,
   onEnterMonitor,
+  onArchiveOpen,
 }: TopBarProps) {
   // Team tab intentionally suppressed; honor showTeamTab once view is reworked.
   void showTeamTab;
@@ -409,6 +411,29 @@ export default function TopBar({
           >
             <circle cx="12" cy="12" r="10" />
             <polyline points="12 6 12 12 16 14" />
+          </svg>
+        </button>
+
+        {/* Archive — recently closed sessions */}
+        <button
+          onClick={onArchiveOpen}
+          className="hidden sm:flex items-center justify-center w-6 h-6 rounded border border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg-muted)] transition-colors cursor-pointer"
+          title="Recently closed sessions"
+          aria-label="Recently closed sessions"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="21 8 21 21 3 21 3 8" />
+            <rect x="1" y="3" width="22" height="5" />
+            <line x1="10" y1="12" x2="14" y2="12" />
           </svg>
         </button>
 
