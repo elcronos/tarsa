@@ -13,6 +13,8 @@ import InsightsView from "./components/InsightsView";
 import TimeTravelScrubber from "./components/TimeTravelScrubber";
 import SessionDiffView from "./components/SessionDiffView";
 import SearchPalette from "./components/SearchPalette";
+import CommandPalette, { type CommandItem } from "./components/CommandPalette";
+import { useHotkey } from "./hooks/useHotkey";
 import GlobalView from "./components/GlobalView";
 import SessionHistory from "./components/SessionHistory";
 import TeamView from "./components/TeamView";
@@ -36,6 +38,7 @@ export default function App() {
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState("global");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(() => loadDismissed());
@@ -339,14 +342,22 @@ export default function App() {
   }, []);
 
   // Keyboard shortcuts
+  // Cmd/Ctrl+K → command palette (jump-to nav). Event search remains
+  // reachable via the topbar search button and Cmd/Ctrl+Shift+F.
+  useHotkey("mod+k", () => {
+    setCommandOpen((v) => !v);
+    setSearchOpen(false);
+  }, []);
+  useHotkey("shift+mod+f", () => {
+    setSearchOpen((v) => !v);
+    setCommandOpen(false);
+  }, []);
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setSearchOpen((v) => !v);
-      }
       if (e.key === "Escape") {
-        if (searchOpen) {
+        if (commandOpen) {
+          setCommandOpen(false);
+        } else if (searchOpen) {
           setSearchOpen(false);
         } else if (selectedAgentId !== null) {
           // ESC closes DetailPanel (US-015)
@@ -356,7 +367,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [searchOpen, selectedAgentId]);
+  }, [searchOpen, commandOpen, selectedAgentId]);
 
   const [flashEventId, setFlashEventId] = useState<string | null>(null);
   const handleSearchResult = useCallback(
@@ -381,6 +392,104 @@ export default function App() {
     const t = setTimeout(() => setFlashEventId(null), 2400);
     return () => clearTimeout(t);
   }, [flashEventId]);
+
+  // Build command palette items: tabs + sessions + agents + actions.
+  // Kept inline rather than memoised — list is short and `state` ref changes
+  // each render anyway, so memo would seldom hit.
+  const commandItems: CommandItem[] = (() => {
+    const items: CommandItem[] = [];
+    const tabs: Array<{ id: string; label: string }> = [
+      { id: "topology", label: "Topology" },
+      { id: "global", label: "Global" },
+      { id: "timeline", label: "Timeline" },
+      { id: "replay", label: "Replay" },
+      { id: "insights", label: "Insights" },
+    ];
+    if (showTeamTab) tabs.push({ id: "team", label: "Team" });
+    for (const t of tabs) {
+      items.push({
+        id: `tab:${t.id}`,
+        kind: "tab",
+        label: `Go to ${t.label}`,
+        hint: activeView === t.id ? "current" : undefined,
+        action: () => handleViewChange(t.id),
+      });
+    }
+    // Project terminals
+    for (const p of projects) {
+      items.push({
+        id: `proj:${p.cwd}`,
+        kind: "terminal",
+        label: `Terminal · ${p.name}`,
+        hint: p.cwd,
+        action: () => handleSelectProject(p.cwd),
+      });
+    }
+    items.push({
+      id: "action:new-terminal",
+      kind: "action",
+      label: "New terminal…",
+      action: () => handleNewTerminal(),
+    });
+    items.push({
+      id: "action:all-sessions",
+      kind: "action",
+      label: "Show all sessions",
+      action: () => handleSelectSession(null),
+    });
+    items.push({
+      id: "action:event-search",
+      kind: "action",
+      label: "Search events…",
+      hint: "⇧⌘F",
+      action: () => setSearchOpen(true),
+    });
+    items.push({
+      id: "action:history",
+      kind: "action",
+      label: "Toggle session history",
+      action: () => setHistoryOpen((v) => !v),
+    });
+    if (projectFilter) {
+      items.push({
+        id: "action:clear-project-filter",
+        kind: "action",
+        label: `Clear project filter (${projectFilter})`,
+        action: () => {
+          try { localStorage.removeItem("tarsa.project-filter"); } catch { /* ignore */ }
+          setProjectFilter(null);
+        },
+      });
+    }
+    // Sessions (jump-to)
+    for (const s of visibleSessions) {
+      const label = s.name ?? s.id;
+      items.push({
+        id: `sess:${s.id}`,
+        kind: "session",
+        label: `Jump to ${label}`,
+        hint: `${s.status} · ${s.id.slice(0, 8)}`,
+        action: () => handleSelectSession(s.id),
+      });
+    }
+    // Agents — limit to current display scope to keep list short
+    for (const a of displayState.agents.values()) {
+      const label = a.name || a.id;
+      items.push({
+        id: `agent:${a.id}`,
+        kind: "agent",
+        label: `Select ${label}`,
+        hint: `${a.status} · ${a.id.slice(0, 8)}`,
+        action: () => {
+          if (a.session_id && a.session_id !== selectedSessionId) {
+            setSelectedSessionId(a.session_id);
+          }
+          handleSelectAgent(a.id);
+        },
+      });
+    }
+    return items;
+  })();
 
   // Time range for scrubber
   const sessionStart = displayEvents.length > 0 ? displayEvents[0]!.ts : Date.now();
@@ -557,7 +666,15 @@ export default function App() {
       </Shell>
       </ErrorBoundary>
 
-      {/* Search palette overlay */}
+      {/* Command palette — jump-to nav (Cmd/Ctrl+K) */}
+      {commandOpen && (
+        <CommandPalette
+          items={commandItems}
+          onClose={() => setCommandOpen(false)}
+        />
+      )}
+
+      {/* Search palette overlay — event search (Cmd/Ctrl+Shift+F) */}
       {searchOpen && (
         <SearchPalette
           query={query}
