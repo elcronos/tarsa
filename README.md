@@ -8,7 +8,24 @@ Live observability for Claude Code agent sessions. Topology, timeline, tool I/O,
 
 ## Quick Start
 
-Requires Node 20+ or Bun 1.x.
+**Recommended — Bun (zero native compile):**
+
+```sh
+bunx tarsa
+```
+
+Bun uses its built-in `bun:sqlite` and needs no native build step, so this is
+the most robust install path across platforms and Node versions.
+
+**Node:**
+
+```sh
+npx tarsa
+```
+
+On Node, `better-sqlite3` (and the embedded terminal's `node-pty`) compile from
+source unless a prebuilt binary matches your Node version — keep Node current if
+the install fails to build.
 
 **One-line install (clones, builds frontend, installs global):**
 
@@ -18,13 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/elcronos/tarsa/main/install.sh | sh
 
 Source lives at `~/.tarsa-src`. Override with `TARSA_HOME=/custom/path`.
 
-**Or zero-install run:**
-
-```sh
-npx tarsa        # Node
-# or
-bunx tarsa       # Bun
-```
+Requires Bun 1.x, or Node 20+.
 
 First run installs hooks into `~/.claude/settings.json` and opens `http://localhost:8100`. Start a Claude Code session in any project; agents appear in real time.
 

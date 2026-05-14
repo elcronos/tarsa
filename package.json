@@ -24,6 +24,7 @@
   "files": [
     "bin",
     "src",
+    "scripts/postinstall-ccweb.mjs",
     "vendor/cc-web",
     "LICENSE",
     "NOTICE",
@@ -38,7 +39,8 @@
     "typecheck": "tsc --noEmit",
     "build": "cd frontend && npm install && npm run build",
     "test": "vitest run",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "postinstall": "node scripts/postinstall-ccweb.mjs"
   },
   "workspaces": [
     "vendor/cc-web"
