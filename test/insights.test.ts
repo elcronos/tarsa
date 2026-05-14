@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { bottleneck, costEstimate, parallelismGaps, stuckSignals, SONNET_INPUT, SONNET_OUTPUT, OPUS_INPUT, OPUS_OUTPUT } from "../src/insights.js";
+import { bottleneck, costEstimate, contextUsage, parallelismGaps, stuckSignals, SONNET_INPUT, SONNET_OUTPUT, OPUS_INPUT, OPUS_OUTPUT } from "../src/insights.js";
 import type { Agent, State, Event, ToolCall, Session } from "../src/models.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -288,5 +288,56 @@ describe("stuckSignals", () => {
     const state = makeState([agent], [], new Map([["minor-err", calls]]));
     const signals = stuckSignals(state);
     expect(signals.filter((s) => s.reason === "consecutive_failures")).toHaveLength(0);
+  });
+});
+
+// ── contextUsage ────────────────────────────────────────────────────────
+
+describe("contextUsage", () => {
+  it("computes fillPercent = 85 for 50k input + 100k cache_read + 20k cache_creation on Sonnet", () => {
+    const agent = makeAgent("a1", { status: "active" });
+    const state = makeState([agent]);
+    const tokensMap = {
+      a1: { input_tokens: 50_000, output_tokens: 0, cache_read: 100_000, cache_creation: 20_000 },
+    };
+    const result = contextUsage(state, tokensMap);
+    expect(result.perAgent).toHaveLength(1);
+    const row = result.perAgent[0]!;
+    // (50000 + 100000 + 20000) / 200000 * 100 = 85
+    expect(row.fillPercent).toBe(85);
+    expect(row.tokensInContext).toBe(170_000);
+    expect(row.contextWindow).toBe(200_000);
+  });
+
+  it("picks max timestamp across multiple cache_creation events for lastCacheWriteMs", () => {
+    const agent = makeAgent("a2", { status: "active" });
+    const events: Event[] = [
+      { id: "e1", hook_event: "PostToolUse", ts: 1000, session_id: "sess-1", agent_id: "a2", cache_creation: 5000 },
+      { id: "e2", hook_event: "PostToolUse", ts: 3000, session_id: "sess-1", agent_id: "a2", cache_creation: 2000 },
+      { id: "e3", hook_event: "PostToolUse", ts: 2000, session_id: "sess-1", agent_id: "a2", cache_creation: 1000 },
+    ];
+    const state = makeState([agent], events);
+    const result = contextUsage(state);
+    const row = result.perAgent[0]!;
+    expect(row.lastCacheWriteMs).toBe(3000);
+    expect(row.cacheExpiresMs).toBe(3000 + 300_000);
+  });
+
+  it("excludes done agents", () => {
+    const active = makeAgent("active", { status: "active" });
+    const done = makeAgent("done", { status: "done" });
+    const state = makeState([active, done]);
+    const result = contextUsage(state);
+    expect(result.perAgent.map((r) => r.agentId)).not.toContain("done");
+    expect(result.perAgent.map((r) => r.agentId)).toContain("active");
+  });
+
+  it("returns null lastCacheWriteMs and cacheExpiresMs when no cache_creation events", () => {
+    const agent = makeAgent("a3", { status: "active" });
+    const state = makeState([agent]);
+    const result = contextUsage(state);
+    const row = result.perAgent[0]!;
+    expect(row.lastCacheWriteMs).toBeNull();
+    expect(row.cacheExpiresMs).toBeNull();
   });
 });

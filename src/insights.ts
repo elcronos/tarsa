@@ -4,7 +4,7 @@
 
 import type { Agent, State, ToolCall } from "./models.js";
 import { createHash } from "node:crypto";
-import { PRICING, detectModel, priceUsd, type ModelKey } from "./shared/pricing.js";
+import { PRICING, CACHE_TTL_MS, detectModel, priceUsd, type ModelKey } from "./shared/pricing.js";
 
 // ── Pricing constants (per million tokens) ────────────────────────────────
 // Re-exported for backward compat with existing tests. Canonical source:
@@ -601,6 +601,83 @@ export function detectBudgetExceeded(
     }
   }
   return out;
+}
+
+// ── Context window utilization ───────────────────────────────────────────
+
+export interface ContextUsageRow {
+  agentId: string;
+  agentName: string;
+  model: ModelKey;
+  tokensInContext: number;
+  contextWindow: number;
+  fillPercent: number;
+  lastCacheWriteMs: number | null;
+  cacheExpiresMs: number | null;
+}
+
+export interface ContextUsageResult {
+  perAgent: ContextUsageRow[];
+}
+
+export function contextUsage(
+  state: State,
+  tokensMap?: Record<string, { input_tokens: number; output_tokens: number; cache_read: number; cache_creation: number }>
+): ContextUsageResult {
+  const perAgent: ContextUsageRow[] = [];
+
+  for (const agent of state.agents.values()) {
+    if (agent.status === "done") continue;
+
+    let tokensInContext = 0;
+    let model: ModelKey = "sonnet";
+    let lastCacheWriteMs: number | null = null;
+
+    if (tokensMap?.[agent.id] != null) {
+      const t = tokensMap[agent.id]!;
+      tokensInContext = t.input_tokens + t.cache_read + t.cache_creation;
+    }
+
+    for (const event of state.events) {
+      if (event.agent_id !== agent.id) continue;
+      const m = event["model"];
+      if (typeof m === "string") {
+        const detected = detectModel(m);
+        if (detected !== "sonnet") model = detected;
+      }
+      const cw = event["cache_creation"];
+      if (typeof cw === "number" && cw > 0) {
+        if (lastCacheWriteMs === null || event.ts > lastCacheWriteMs) {
+          lastCacheWriteMs = event.ts;
+        }
+      }
+      if (tokensMap == null) {
+        const it = event["input_tokens"];
+        const cr = event["cache_read"];
+        const cc = event["cache_creation"];
+        if (typeof it === "number") tokensInContext += it;
+        if (typeof cr === "number") tokensInContext += cr;
+        if (typeof cc === "number") tokensInContext += cc;
+      }
+    }
+
+    const contextWindow = PRICING[model].contextWindow;
+    const fillPercent = Math.round((tokensInContext / contextWindow) * 1000) / 10;
+    const cacheExpiresMs = lastCacheWriteMs !== null ? lastCacheWriteMs + CACHE_TTL_MS : null;
+
+    perAgent.push({
+      agentId: agent.id,
+      agentName: agent.name,
+      model,
+      tokensInContext,
+      contextWindow,
+      fillPercent,
+      lastCacheWriteMs,
+      cacheExpiresMs,
+    });
+  }
+
+  return { perAgent };
 }
 
 // ── Z-score badge ─────────────────────────────────────────────────────────

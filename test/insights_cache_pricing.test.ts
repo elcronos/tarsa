@@ -64,6 +64,7 @@ describe("pricing module", () => {
       output: 15,
       cacheRead: 0.3,
       cacheWrite: 3.75,
+      contextWindow: 200_000,
     });
   });
 
@@ -73,6 +74,7 @@ describe("pricing module", () => {
       output: 75,
       cacheRead: 1.5,
       cacheWrite: 18.75,
+      contextWindow: 200_000,
     });
   });
 
@@ -82,6 +84,7 @@ describe("pricing module", () => {
       output: 4,
       cacheRead: 0.08,
       cacheWrite: 1.0,
+      contextWindow: 200_000,
     });
   });
 

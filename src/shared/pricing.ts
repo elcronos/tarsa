@@ -13,15 +13,20 @@ export interface ModelPricing {
   output: number;
   cacheRead: number;
   cacheWrite: number;
+  /** Max context window in tokens. */
+  contextWindow: number;
 }
+
+/** Prompt cache TTL in ms (Anthropic: 5 minutes from last cache write). */
+export const CACHE_TTL_MS = 300_000;
 
 export const PRICING: Record<ModelKey, ModelPricing> = {
   // Claude Sonnet 4.5
-  sonnet: { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75 },
+  sonnet: { input: 3.0, output: 15.0, cacheRead: 0.3, cacheWrite: 3.75, contextWindow: 200_000 },
   // Claude Opus 4.7
-  opus: { input: 15.0, output: 75.0, cacheRead: 1.5, cacheWrite: 18.75 },
+  opus: { input: 15.0, output: 75.0, cacheRead: 1.5, cacheWrite: 18.75, contextWindow: 200_000 },
   // Claude Haiku 4.5
-  haiku: { input: 0.8, output: 4.0, cacheRead: 0.08, cacheWrite: 1.0 },
+  haiku: { input: 0.8, output: 4.0, cacheRead: 0.08, cacheWrite: 1.0, contextWindow: 200_000 },
 };
 
 /**

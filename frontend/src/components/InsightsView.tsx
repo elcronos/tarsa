@@ -3,6 +3,7 @@ import type { State, Agent, BaselineRow, CostSource, Iteration } from "../types"
 import { formatDuration, formatCost } from "../utils/format";
 import StuckBadge from "./StuckBadge";
 import EmptyState from "./EmptyState";
+import ContextWindowCard, { type ContextUsageRow } from "./ContextWindowCard";
 import { getCsrfToken } from "../hooks/useAgentState";
 import { authHeaders } from "../utils/auth";
 
@@ -108,6 +109,7 @@ interface InsightsData {
   errorRecovery?: ErrorRecoveryEntry[];
   agentPerformance?: AgentPerfRow[];
   agentTypeProfiles?: AgentTypeProfile[];
+  contextUsage?: { perAgent: ContextUsageRow[] };
 }
 
 // ── Client-side stuck detection (mirrors server heuristic) ───────────────────
@@ -872,6 +874,7 @@ export default function InsightsView({ state }: InsightsViewProps) {
   const signals = serverInsights?.stuckSignals ?? stuckSignals;
   const errorRecoveryEntries = serverInsights?.errorRecovery ?? [];
   const agentTypeProfiles = serverInsights?.agentTypeProfiles ?? [];
+  const contextUsageRows: ContextUsageRow[] = serverInsights?.contextUsage?.perAgent ?? [];
 
   // Selected session for budget card + iteration sparkline
   const selectedSessionId = useMemo(() => {
@@ -969,6 +972,16 @@ export default function InsightsView({ state }: InsightsViewProps) {
             <StuckAgentCard key={i} sig={sig} state={state} />
           ))}
         </div>
+      )}
+
+      {/* Context window utilization (active agents only) */}
+      {contextUsageRows.length > 0 && (
+        <section className="rounded border border-[var(--border)] bg-[var(--surface)] p-3">
+          <div className="text-[10px] font-mono text-[var(--fg-subtle)] uppercase tracking-wider mb-3">
+            Context Window
+          </div>
+          <ContextWindowCard rows={contextUsageRows} />
+        </section>
       )}
 
       {/* Cost breakdown */}
