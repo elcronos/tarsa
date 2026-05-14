@@ -15,6 +15,7 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
+import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -39,6 +40,9 @@ export interface SupervisorOptions {
 }
 
 const DEFAULT_PORT = 8101;
+const PORT_PROBE_ATTEMPTS = 20;
+const MAX_RESTARTS = 3;
+const RESTART_BACKOFF_MS = 1_000;
 
 /**
  * Resolve the vendored cc-web bin script. Walks up from this source file so
@@ -55,20 +59,49 @@ function findCcWebBin(): string | null {
   return null;
 }
 
+/** True if `port` can be bound (on all interfaces, matching cc-web's bind). */
+function portIsFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once("error", () => resolve(false));
+    srv.once("listening", () => srv.close(() => resolve(true)));
+    srv.listen(port);
+  });
+}
+
+/** First free port at or after `start`, or null if none in the probe window. */
+async function findFreePort(start: number): Promise<number | null> {
+  for (let p = start; p < start + PORT_PROBE_ATTEMPTS; p++) {
+    if (await portIsFree(p)) return p;
+  }
+  return null;
+}
+
 export class CcWebSupervisor {
   private child: ChildProcess | null = null;
   private info: CcWebInfo;
+  private readonly basePort: number;
+  private restarts = 0;
+  private stopped = false;
 
   constructor(opts: SupervisorOptions = {}) {
+    this.basePort = opts.port ?? DEFAULT_PORT;
     this.info = {
       enabled: opts.enabled ?? true,
-      port: opts.port ?? DEFAULT_PORT,
+      port: this.basePort,
       token: crypto.randomBytes(16).toString("hex"),
     };
   }
 
-  /** Start the cc-web child process. Idempotent. */
-  start(): void {
+  /**
+   * Start the cc-web child process. Idempotent.
+   *
+   * Probes for a free port first: a stale cc-web from a prior run (or anything
+   * else on 8101) would otherwise crash the child with EADDRINUSE and leave the
+   * embedded terminal permanently dead. Unexpected crashes are retried a few
+   * times with backoff.
+   */
+  async start(): Promise<void> {
     if (!this.info.enabled || this.child) return;
 
     const bin = findCcWebBin();
@@ -79,6 +112,21 @@ export class CcWebSupervisor {
       this.info.enabled = false;
       return;
     }
+
+    const freePort = await findFreePort(this.basePort);
+    if (freePort == null) {
+      process.stderr.write(
+        `[tarsa] no free port near ${this.basePort} — embedded terminal disabled\n`
+      );
+      this.info.enabled = false;
+      return;
+    }
+    if (freePort !== this.info.port) {
+      process.stderr.write(
+        `[tarsa] cc-web port ${this.info.port} busy, using ${freePort}\n`
+      );
+    }
+    this.info.port = freePort;
 
     const args = [
       bin,
@@ -117,6 +165,24 @@ export class CcWebSupervisor {
       );
       this.child = null;
       this.info.pid = undefined;
+
+      // Auto-restart on unexpected crash. stop() sets `stopped` so an
+      // intentional shutdown doesn't trigger a respawn. Re-running start()
+      // re-probes the port, so a transient conflict resolves itself.
+      if (!this.stopped && code !== 0 && this.restarts < MAX_RESTARTS) {
+        this.restarts++;
+        process.stderr.write(
+          `[tarsa] restarting cc-web (attempt ${this.restarts}/${MAX_RESTARTS})\n`
+        );
+        setTimeout(() => {
+          void this.start();
+        }, RESTART_BACKOFF_MS);
+      } else if (!this.stopped && this.restarts >= MAX_RESTARTS) {
+        process.stderr.write(
+          "[tarsa] cc-web crashed repeatedly — embedded terminal disabled\n"
+        );
+        this.info.enabled = false;
+      }
     });
 
     this.child = child;
@@ -170,6 +236,7 @@ export class CcWebSupervisor {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.child) {
       try {
         this.child.kill("SIGTERM");

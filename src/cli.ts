@@ -296,7 +296,7 @@ async function main(): Promise<void> {
   const ccWeb = new CcWebSupervisor({
     enabled: process.env["TARSA_TERMINAL"] !== "0",
   });
-  ccWeb.start();
+  await ccWeb.start();
 
   // Start HTTP server
   const server = await startServer({ port: opts.port, processor, db, host: opts.host, allowRemote: opts.allowRemote, authToken, ccWeb });
